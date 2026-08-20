@@ -2,7 +2,7 @@
 
 Browser-based dataset, USS, and job management for z/OS, built entirely on IBM z/OSMF REST APIs.
 
-Reference environment: `yourhost.example.com` (z/OS V3R2, z/OSMF v30)
+Reference environment: z/OS V3R2, z/OSMF v30
 
 ## Contents
 
