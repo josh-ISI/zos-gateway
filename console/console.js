@@ -3206,7 +3206,18 @@ function refreshEditorChrome(t) {
   const area = root && root.querySelector('#editorArea');
   if (!area) return;
   const lines = area.value.split('\n');
-  root.querySelector('#edHlCode').innerHTML = highlightCode(area.value, effectiveFormat(t));
+  // Same height-mismatch bug documented for the SYSLOG tab above, but
+  // general to every tab kind: a <textarea> reserves a full line-height for
+  // the phantom empty line after a trailing "\n"; the #edHl <pre><code>
+  // overlay does not grow by the same amount for the identical string. That
+  // fixed dataset text ending in "\n" (the overwhelmingly common case) at
+  // its source there was SYSLOG-specific; this generalizes it without
+  // touching real content: pad the *rendered* overlay HTML with one extra
+  // blank line whenever the source ends in "\n", so #edHl's scrollHeight
+  // always matches #editorArea's. Never touches area.value/t.text, so it
+  // can't affect what actually gets saved.
+  const hlHtml = highlightCode(area.value, effectiveFormat(t));
+  root.querySelector('#edHlCode').innerHTML = area.value.endsWith('\n') ? hlHtml + '\n' : hlHtml;
   let gutter = '';
   for (let i = 1; i <= lines.length; i++) gutter += i + '\n';
   root.querySelector('#edGutter').textContent = gutter;
