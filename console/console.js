@@ -852,20 +852,37 @@ async function ussList(path) {
   const j = await zCall('GET', '/zosmf/restfiles/fs?path=' + enc(path));
   return (j && j.items) || [];
 }
-// Default USS text conversion: explicitly request ISO8859-1 rather than
-// omitting X-IBM-Data-Type. Leaving the header off doesn't mean "no
-// conversion" - z/OSMF still runs one, against its own default codepage
-// (effectively EBCDIC/IBM-1047 on most z/OS systems), which is wrong for
-// the overwhelming majority of real USS text content (shell scripts,
-// dotfiles like .bash_history, config files, logs) since that's already
-// stored as plain ASCII/ISO8859-1, not EBCDIC. Confirmed live: opening
-// .bash_history without this rendered as mojibake (ASCII bytes run through
-// an EBCDIC codepage). Read and write must agree on this default, or a
-// round-trip open/edit/save silently corrupts the file on the way back.
-// Genuinely EBCDIC-tagged or binary USS files still work via "Open with
-// Encoding..." (openWithEncoding/pickEncoding above), which overrides this.
-async function ussRead(path) { return await zCall('GET', '/zosmf/restfiles/fs/' + ussEncPath(path), { raw: true, headers: encHeaders('ISO8859-1') }); }
-async function ussWrite(path, text) { await zCall('PUT', '/zosmf/restfiles/fs/' + ussEncPath(path), { body: text, headers: encHeaders('ISO8859-1') }); }
+// Default USS text conversion: explicitly request IBM-1047 rather than
+// omitting X-IBM-Data-Type - this is the codepage this project's own USS
+// content is actually stored in (see the README's deploy steps: every text
+// file pushed to USS goes through "text;fileEncoding=IBM-1047"), and it's
+// also z/OSMF's own implicit default when the header is left off, so being
+// explicit here just documents that rather than changing behavior.
+//
+// IMPORTANT: there is no single correct default for every USS file. USS
+// genuinely mixes EBCDIC-native content (anything deployed/edited through
+// mainframe-native tooling, which is the norm for this project - RACF
+// backend scripts, htdocs files, etc.) with true ASCII-native content
+// (shell-generated dotfiles like .bash_history, since OMVS's own shell
+// writes those as plain ASCII, untagged). Forcing ISO8859-1 here previously
+// "fixed" .bash_history but broke the far more common IBM-1047 case:
+// z/OSMF took genuinely-EBCDIC bytes and, told to treat them as ISO8859-1,
+// never ran the EBCDIC conversion at all - so what displayed was raw EBCDIC
+// byte values misread as Latin-1, and round-tripping (edit + save) wrote
+// back through the wrong codepage entirely. Confirmed live against
+// racf-backend-recycle.sh (deployed via `zowe zos-files upload --encoding
+// IBM-1047`, correct in PCOMM/x3270, garbled in the browser after that
+// change; also garbled in PCOMM after being edited/saved via the browser).
+//
+// For a genuinely ASCII-native file (.bash_history and similar), use "Open
+// with Encoding..." (openWithEncoding/pickEncoding above) and pick
+// ISO8859-1 explicitly - that's what per-file overrides are for. A better
+// long-term fix would be reading each file's actual ccsid tag (if z/OSMF's
+// API exposes it) and using that automatically instead of guessing either
+// way, but that needs further investigation against the live system before
+// changing this again.
+async function ussRead(path) { return await zCall('GET', '/zosmf/restfiles/fs/' + ussEncPath(path), { raw: true, headers: encHeaders('IBM-1047') }); }
+async function ussWrite(path, text) { await zCall('PUT', '/zosmf/restfiles/fs/' + ussEncPath(path), { body: text, headers: encHeaders('IBM-1047') }); }
 async function ussDelete(path, isDir) {
   await zCall('DELETE', '/zosmf/restfiles/fs/' + ussEncPath(path), isDir ? { headers: { 'X-IBM-Option': 'recursive' } } : undefined);
 }
