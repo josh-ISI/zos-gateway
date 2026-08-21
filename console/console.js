@@ -852,8 +852,20 @@ async function ussList(path) {
   const j = await zCall('GET', '/zosmf/restfiles/fs?path=' + enc(path));
   return (j && j.items) || [];
 }
-async function ussRead(path) { return await zCall('GET', '/zosmf/restfiles/fs/' + ussEncPath(path), { raw: true }); }
-async function ussWrite(path, text) { await zCall('PUT', '/zosmf/restfiles/fs/' + ussEncPath(path), { body: text }); }
+// Default USS text conversion: explicitly request ISO8859-1 rather than
+// omitting X-IBM-Data-Type. Leaving the header off doesn't mean "no
+// conversion" - z/OSMF still runs one, against its own default codepage
+// (effectively EBCDIC/IBM-1047 on most z/OS systems), which is wrong for
+// the overwhelming majority of real USS text content (shell scripts,
+// dotfiles like .bash_history, config files, logs) since that's already
+// stored as plain ASCII/ISO8859-1, not EBCDIC. Confirmed live: opening
+// .bash_history without this rendered as mojibake (ASCII bytes run through
+// an EBCDIC codepage). Read and write must agree on this default, or a
+// round-trip open/edit/save silently corrupts the file on the way back.
+// Genuinely EBCDIC-tagged or binary USS files still work via "Open with
+// Encoding..." (openWithEncoding/pickEncoding above), which overrides this.
+async function ussRead(path) { return await zCall('GET', '/zosmf/restfiles/fs/' + ussEncPath(path), { raw: true, headers: encHeaders('ISO8859-1') }); }
+async function ussWrite(path, text) { await zCall('PUT', '/zosmf/restfiles/fs/' + ussEncPath(path), { body: text, headers: encHeaders('ISO8859-1') }); }
 async function ussDelete(path, isDir) {
   await zCall('DELETE', '/zosmf/restfiles/fs/' + ussEncPath(path), isDir ? { headers: { 'X-IBM-Option': 'recursive' } } : undefined);
 }
