@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sign in &middot; z/OS Gateway</title>
+<style>
+  :root {
+    --brand-blue: #005baa;
+    --brand-blue-dark: #003d75;
+    --brand-navy: #0b1f33;
+    --ink: #1c2733;
+    --muted: #5a6b7b;
+    --line: #e2e8ef;
+    --err: #b3261e;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    min-height: 100vh;
+    display: flex; align-items: center; justify-content: center;
+    font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    background: linear-gradient(135deg, var(--brand-navy) 0%, var(--brand-blue-dark) 55%, var(--brand-blue) 100%);
+    color: var(--ink);
+  }
+  .authWrap {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+    max-width: 380px;
+  }
+  .authWrap .brandMark {
+    font-size: 20px; font-weight: 700; color: #fff; letter-spacing: .01em;
+    display: block; margin-bottom: 24px;
+  }
+  .card {
+    background: #fff;
+    border-radius: 12px;
+    width: 100%;
+    padding: 36px 32px 32px;
+    box-shadow: 0 20px 60px rgba(0,0,0,.35);
+  }
+  .card h1 {
+    font-size: 18px;
+    text-align: center;
+    margin: 0 0 6px;
+    color: var(--brand-navy);
+  }
+  .card .sub {
+    text-align: center;
+    font-size: 13px;
+    color: var(--muted);
+    margin: 0 0 26px;
+  }
+  label {
+    display: block;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: var(--brand-navy);
+    margin: 0 0 6px;
+  }
+  input[type=text], input[type=password] {
+    width: 100%;
+    padding: 10px 12px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    font-size: 14px;
+    margin-bottom: 18px;
+    font-family: inherit;
+  }
+  input[type=text]:focus, input[type=password]:focus {
+    outline: none;
+    border-color: var(--brand-blue);
+    box-shadow: 0 0 0 3px rgba(0,91,170,.15);
+  }
+  button {
+    width: 100%;
+    padding: 12px;
+    border: 0;
+    border-radius: 6px;
+    background: var(--brand-blue);
+    color: #fff;
+    font-size: 14.5px;
+    font-weight: 600;
+    cursor: pointer;
+  }
+  button:hover { background: var(--brand-blue-dark); }
+  button:disabled { opacity: .6; cursor: default; }
+  .err {
+    display: none;
+    background: #fdeceb;
+    color: var(--err);
+    border: 1px solid #f4c6c2;
+    border-radius: 6px;
+    padding: 10px 12px;
+    font-size: 13px;
+    margin-bottom: 18px;
+  }
+  .err.show { display: block; }
+  .foot {
+    text-align: center;
+    font-size: 12px;
+    color: var(--muted);
+    margin-top: 20px;
+  }
+  .foot a { color: var(--brand-blue); text-decoration: none; }
+</style>
+</head>
+<body>
+  <div class="authWrap">
+    <span class="brandMark">z/OS Gateway</span>
+    <form class="card" id="loginForm" autocomplete="off">
+      <h1>z/OS Gateway</h1>
+      <p class="sub">Sign in with your z/OS user ID</p>
+      <div class="err" id="err"></div>
+      <label for="user">User ID</label>
+      <input type="text" id="user" maxlength="8" autocapitalize="off" autocomplete="username" required>
+      <label for="pass">Password</label>
+      <input type="password" id="pass" autocomplete="current-password" required>
+      <button type="submit" id="submitBtn">Sign in</button>
+      <div class="foot"><a href="../">&larr; Back to the main page</a></div>
+    </form>
+  </div>
+
+<script>
+  // Trades the entered credentials for a z/OSMF session cookie (LtpaToken2)
+  // by calling /zosmf/services/authenticate through the IHS reverse proxy
+  // at this same origin. Once that cookie is set, every /zosmf/* call the
+  // console makes afterward is authenticated as this user automatically -
+  // no server-side session store here, z/OSMF *is* the session store.
+  const form = document.getElementById('loginForm');
+  const errBox = document.getElementById('err');
+  const btn = document.getElementById('submitBtn');
+
+  function showError(msg) { errBox.textContent = msg; errBox.classList.add('show'); }
+  function hideError() { errBox.classList.remove('show'); }
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    hideError();
+    const user = document.getElementById('user').value.trim().toUpperCase();
+    const pass = document.getElementById('pass').value;
+    if (!user || !pass) { showError('Enter a user ID and password.'); return; }
+
+    btn.disabled = true; btn.textContent = 'Signing in...';
+    try {
+      const r = await fetch('/zosmf/services/authenticate', {
+        method: 'POST',
+        headers: { 'Authorization': 'Basic ' + btoa(user + ':' + pass) }
+      });
+      if (r.ok) {
+        localStorage.setItem('isiUser', user);
+        location.href = 'index.html';
+      } else if (r.status === 401 || r.status === 403) {
+        showError('Sign-in failed - check your user ID and password.');
+      } else {
+        showError('Unexpected response from the gateway backend (HTTP ' + r.status + ').');
+      }
+    } catch (err) {
+      showError('Could not reach the gateway backend. Is the proxy up?');
+    } finally {
+      btn.disabled = false; btn.textContent = 'Sign in';
+    }
+  });
+</script>
+</body>
+</html>

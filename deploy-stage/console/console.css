@@ -1,0 +1,662 @@
+:root {
+  --brand-blue: #005baa;
+  --brand-blue-dark: #003d75;
+  --brand-navy: #0b1f33;
+  --ink: #1c2733;
+  --muted: #5a6b7b;
+  --line: #e2e8ef;
+  --bg-soft: #f4f7fa;
+  --surface: #fff;
+  --err: #b3261e;
+  --ok: #1e7a3e;
+  --tok-cmt: #2e7d32;
+  --tok-str: #a0522d;
+  --tok-kw: #005baa;
+  --tok-name: #7b4fbf;
+  --tok-num: #1a7f5a;
+  --tok-label: #0f7b6c;
+  --hover-bg: #eef4fa;
+  --hover-danger-bg: #fdeceb;
+  --ok-bg: #e7f6ec;
+  --ok-border: #b9e3c6;
+  --err-bg: #fdeceb;
+  --err-border: #f4c6c2;
+  --active-bg: #e3edfb;
+  --warn-bg: #fff7e0;
+  --warn-border: #f0dca0;
+  --warn-ink: #7a5c00;
+  --accent-ink: #003d75;
+  --guide-field: rgba(11,31,51,.16);
+  --scrollbar-thumb: rgba(100,100,100,.4);
+  --scrollbar-thumb-hover: rgba(100,100,100,.7);
+  --scrollbar-thumb-active: rgba(0,0,0,.6);
+}
+/* Dark mode overrides - toggled via document.documentElement's data-theme
+   attribute (see console.js "theme" section). The header stays the same
+   navy in both modes; everything else re-derives from these variables. */
+html[data-theme="dark"] {
+  --ink: #e6edf3;
+  --muted: #93a4b5;
+  --line: #2b3947;
+  --bg-soft: #17212b;
+  --surface: #1e2933;
+  --err: #ff7a70;
+  --ok: #52d17c;
+  --tok-cmt: #6a9955;
+  --tok-str: #ce9178;
+  --tok-kw: #569cd6;
+  --tok-name: #dcdcaa;
+  --tok-num: #b5cea8;
+  --tok-label: #4ec9b0;
+  --hover-bg: rgba(255,255,255,.08);
+  --hover-danger-bg: rgba(255,122,112,.15);
+  --ok-bg: rgba(82,209,124,.15);
+  --ok-border: rgba(82,209,124,.35);
+  --err-bg: rgba(255,122,112,.15);
+  --err-border: rgba(255,122,112,.35);
+  --active-bg: rgba(77,163,255,.18);
+  --warn-bg: rgba(224,163,0,.15);
+  --warn-border: rgba(224,163,0,.4);
+  --warn-ink: #e0c260;
+  --accent-ink: #7ab8f5;
+  --guide-field: rgba(255,255,255,.16);
+  --scrollbar-thumb: rgba(121,121,121,.4);
+  --scrollbar-thumb-hover: rgba(100,100,100,.7);
+  --scrollbar-thumb-active: rgba(191,191,191,.4);
+}
+* { box-sizing: border-box; }
+/* VS Code-style scrollbars: thin, flat rectangular thumb (no rounded
+   corners, no arrow buttons), transparent track, semi-transparent thumb
+   that solidifies on hover/drag - applied globally so the sidebar tree,
+   editor, tab bar, context menu, and modal panes all match. Firefox has no
+   ::-webkit-scrollbar support, so scrollbar-width/scrollbar-color cover it
+   there with the closest built-in equivalent ("thin"). */
+* { scrollbar-width: thin; scrollbar-color: var(--scrollbar-thumb) transparent; }
+::-webkit-scrollbar { width: 14px; height: 14px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb {
+  background-color: var(--scrollbar-thumb);
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+::-webkit-scrollbar-thumb:hover { background-color: var(--scrollbar-thumb-hover); }
+::-webkit-scrollbar-thumb:active { background-color: var(--scrollbar-thumb-active); }
+::-webkit-scrollbar-corner { background: transparent; }
+html, body {
+  margin: 0; height: 100%;
+  font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  color: var(--ink);
+  background: var(--surface);
+}
+button { font-family: inherit; cursor: pointer; }
+a { color: var(--brand-blue); }
+input[type=text], select, textarea { background: var(--surface); color: var(--ink); }
+
+/* ---- header ---- */
+header {
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 12px 20px;
+  background: var(--brand-navy);
+  color: #fff;
+  position: relative; /* anchors #profilePop */
+}
+header .brand { display: flex; align-items: center; gap: 12px; }
+header .brand .brandMark { font-size: 15px; font-weight: 700; color: #fff; letter-spacing: .01em; }
+header .who { display: flex; align-items: center; gap: 14px; font-size: 13px; color: #b9cbdd; }
+header .who button {
+  background: transparent; border: 1px solid rgba(255,255,255,.35); color: #fff;
+  padding: 6px 12px; border-radius: 5px; font-size: 12.5px;
+}
+header .who button:hover { background: rgba(255,255,255,.12); }
+/* Generic avatar icon instead of a "Signed in" text button - just an
+   account glyph, same idea as the round profile icon most apps use. */
+header .who .whoBtn {
+  font-family: inherit;
+  width: 32px; height: 32px; padding: 0;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+}
+header .who .whoBtn .avatarIcon { color: #fff; }
+.srOnly {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0;
+}
+
+/* ---- flash message ---- */
+#msg {
+  position: fixed; top: 70px; left: 50%; transform: translateX(-50%);
+  padding: 10px 18px; border-radius: 6px; font-size: 13.5px;
+  max-width: 640px;
+  display: flex; align-items: center; gap: 10px;
+  z-index: 500; opacity: 0; pointer-events: none; transition: opacity .15s;
+}
+#msg.show { opacity: 1; pointer-events: auto; }
+#msg.ok { background: var(--ok-bg); color: var(--ok); border: 1px solid var(--ok-border); }
+#msg.err { background: var(--err-bg); color: var(--err); border: 1px solid var(--err-border); }
+#msg .msgText { flex: 1; }
+#msg .msgCopy {
+  flex: none; display: flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; padding: 0; border-radius: 4px;
+  background: transparent; border: 1px solid currentColor; opacity: .7;
+  color: inherit; cursor: pointer; transition: opacity .12s, background .12s;
+}
+#msg .msgCopy:hover { opacity: 1; background: rgba(0, 0, 0, .06); }
+html[data-theme="dark"] #msg .msgCopy:hover { background: rgba(255, 255, 255, .1); }
+#msg .msgClose {
+  flex: none; display: flex; align-items: center; justify-content: center;
+  width: 22px; height: 22px; padding: 0; border-radius: 4px; font-size: 16px;
+  line-height: 1; background: transparent; border: none; opacity: .7;
+  color: inherit; cursor: pointer; transition: opacity .12s, background .12s;
+}
+#msg .msgClose:hover { opacity: 1; background: rgba(0, 0, 0, .06); }
+html[data-theme="dark"] #msg .msgClose:hover { background: rgba(255, 255, 255, .1); }
+
+/* ---- job-submitted toast (bottom-right, clickable) ----
+   Separate from #msg above - that one just confirms the submit fired and
+   fades on its own; this one is meant to be clicked, so it sits lower
+   right (out of the way of the sidebar/editor), stacks if more than one
+   job is submitted in quick succession, and stays up long enough to act
+   on. Clicking it (outside the dismiss button) jumps to the job in the
+   Jobs section via openJobInTree(). */
+.jobToasts {
+  position: fixed; right: 20px; bottom: 20px; z-index: 900;
+  display: flex; flex-direction: column-reverse; gap: 10px;
+  pointer-events: none;
+}
+.jobToast {
+  pointer-events: auto;
+  display: flex; align-items: flex-start; gap: 10px;
+  width: 280px; padding: 12px 12px 12px 14px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 8px;
+  box-shadow: 0 10px 28px rgba(0,0,0,.22);
+  cursor: pointer;
+  opacity: 0; transform: translateY(8px);
+  transition: opacity .18s ease, transform .18s ease;
+}
+.jobToast.show { opacity: 1; transform: translateY(0); }
+.jobToast:hover { border-color: var(--brand-blue); }
+.jobToastMain { flex: 1; min-width: 0; }
+.jobToastTitle { font-size: 13px; font-weight: 700; color: var(--ink); margin-bottom: 3px; }
+.jobToastSub { font-size: 12px; color: var(--muted); }
+.jobToastClose {
+  flex: none; background: transparent; border: 0; color: var(--muted);
+  font-size: 16px; line-height: 1; padding: 2px 4px; cursor: pointer;
+}
+.jobToastClose:hover { color: var(--ink); }
+
+/* ==================== SHELL: sidebar + editor ==================== */
+.shell { display: flex; height: calc(100vh - 49px); }
+.sidebar {
+  width: 320px; min-width: 260px; flex: none;
+  border-right: 1px solid var(--line);
+  display: flex; flex-direction: column;
+  background: var(--bg-soft);
+  /* No outer scrollbar here on purpose - each section's own .tree scrolls
+     independently (overflow:auto below), the same way VS Code's sidebar
+     views each get their own scrollbar instead of one bar spanning the
+     whole panel. Letting .sidebar itself scroll was combining every
+     section's overflow into a single outer bar. */
+  overflow: hidden;
+}
+/* Drag handles: .sideResizer sits between two stacked sections (drag up/
+   down to trade height between whichever open sections are nearest above
+   and below it - see nearestOpenSection() in console.js). .shellResizer
+   sits between the whole sidebar and the editor pane (drag left/right to
+   resize the sidebar itself). Both are just a thin hit-area with a hover
+   highlight - no visible grip by default, matching the console's otherwise
+   minimal chrome. */
+.sideResizer {
+  height: 6px; flex: none; cursor: row-resize; background: transparent;
+}
+.sideResizer:hover, .sideResizer.active { background: var(--brand-blue); opacity: .35; }
+.shellResizer {
+  width: 6px; flex: none; cursor: col-resize; background: transparent;
+}
+.shellResizer:hover, .shellResizer.active { background: var(--brand-blue); opacity: .35; }
+/* Each section takes its fair share of the sidebar's height while open
+   (VS Code / Zowe Explorer style - multiple expanded sections share space
+   and each scrolls independently), and shrinks to just its header when
+   collapsed. */
+.sideSection {
+  display: flex; flex-direction: column;
+  flex: none;
+  border-bottom: 1px solid var(--line);
+  min-height: 0;
+  /* Without this, dragging a section shorter than its content's natural
+     height (e.g. a Favorites block plus tree) doesn't clip that content -
+     it spills straight out of the section's box and overlaps whatever
+     sits below it. */
+  overflow: hidden;
+}
+/* min-height:34px (roughly one .sideHead's rendered height) guarantees an
+   open section's header always stays visible even when the sidebar can't
+   fit every open section at its preferred size - see applySideHeights()
+   in console.js, which now lets sections with a saved height shrink
+   (flex-shrink:1) instead of holding it rigidly. Without both of these,
+   two sections with large saved heights could squeeze a third newly-
+   opened section down to 0px and off the screen entirely. */
+.sideSection.open { flex: 1; min-height: 34px; }
+.sideHead {
+  display: flex; align-items: center; gap: 6px; flex: none;
+  padding: 9px 12px; cursor: pointer; user-select: none;
+  font-size: 11.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+  color: var(--muted); background: var(--bg-soft);
+}
+.sideHead:hover { color: var(--accent-ink); }
+.sideHead .chev { font-size: 10px; transition: transform .1s; display: inline-block; }
+.sideSection:not(.open) .sideHead .chev { transform: rotate(-90deg); }
+.sideBody { display: none; flex: 1; flex-direction: column; min-height: 0; position: relative; }
+.sideSection.open .sideBody { display: flex; }
+
+.filterRow { padding: 8px 10px; display: flex; gap: 6px; border-bottom: 1px solid var(--line); flex: none; }
+.filterRow input { flex: 1; padding: 7px 9px; border: 1px solid var(--line); border-radius: 5px; font-size: 13px; }
+.sideBody .toolbar { display: flex; gap: 6px; padding: 8px 10px; flex: none; }
+
+/* ---- USS breadcrumb bar + search/recent-filters popover ---- */
+.ussBar {
+  display: flex; align-items: center; gap: 6px; padding: 8px 10px;
+  border-bottom: 1px solid var(--line); flex: none; background: var(--surface);
+}
+.ussCurPath {
+  flex: 1; font-size: 12.5px; font-family: "SF Mono", Consolas, "Courier New", monospace;
+  color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.iconBtn {
+  border: 1px solid var(--line); background: var(--surface); border-radius: 5px;
+  width: 26px; height: 26px; font-size: 13px; color: var(--accent-ink); flex: none;
+  display: flex; align-items: center; justify-content: center;
+}
+.iconBtn:hover { background: var(--hover-bg); }
+.iconBtn.active { background: var(--brand-blue); border-color: var(--brand-blue); color: #fff; }
+.sortSelect {
+  padding: 6px 6px; border: 1px solid var(--line); border-radius: 5px;
+  font-size: 12px; background: var(--surface); color: var(--accent-ink); flex: none;
+}
+.ussFilterPop {
+  top: 44px; left: 10px; right: 10px; width: auto;
+}
+/* Jobs section's "Search Jobs" popover - positioned via JS
+   (positionJobSearchPop() in console.js) relative to the search icon
+   button, rather than the .ussFilterPop-style "anchor under a hardcoded
+   top offset" approach. .sideSection has overflow:hidden (each collapsible
+   sidebar section clips to its own resizable box - see the .sidebar/
+   .sideSection comments above), which was clipping the bottom of this
+   popover (Search button + recent-searches list) whenever the Jobs
+   section's rendered height was short. position:fixed + JS-computed
+   coordinates is the same trick #ctx (the right-click context menu) uses
+   to escape that same kind of ancestor clipping. */
+/* ID selector, not .jobSearchPop - .popover (below) sets position:absolute/
+   width:280px on the same specificity (0,1,0) as a plain class rule, and
+   it's defined later in this file, so a same-specificity .jobSearchPop
+   rule here would lose the cascade to it regardless of what this rule
+   says (this bit the first attempt at this fix, which used .jobSearchPop
+   and silently did nothing). #jobSearchPop (specificity 1,0,0) always
+   wins over .popover's 0,1,0, so this can't get clobbered by reordering
+   .popover later either. */
+#jobSearchPop {
+  position: fixed; right: auto; width: 260px;
+  max-height: calc(100vh - 20px); overflow-y: auto;
+}
+.jobSearchPop input, .jobSearchPop select {
+  width: 100%; padding: 7px 9px; border: 1px solid var(--line); border-radius: 5px; font-size: 13px; margin-bottom: 6px;
+}
+.ussFilterPop input {
+  width: 100%; padding: 7px 9px; border: 1px solid var(--line); border-radius: 5px; font-size: 13px; margin-bottom: 6px;
+}
+.ussFilterCreate {
+  padding: 8px 10px; border-radius: 5px; margin: 0 0 8px; font-weight: 600;
+  color: #fff; background: var(--brand-blue);
+}
+.ussFilterCreate:hover { background: var(--brand-blue-dark); }
+.ussFilterRecentLabel {
+  font-size: 10.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em;
+  color: var(--muted); margin: 4px 0 2px;
+}
+.ussRecentItem { padding: 7px 8px; border-radius: 4px; font-size: 12.5px; cursor: pointer; color: var(--ink); }
+.ussRecentItem:hover { background: var(--hover-bg); }
+.btn {
+  padding: 7px 11px; border: 1px solid var(--line); border-radius: 5px;
+  background: var(--surface); font-size: 12.5px; font-weight: 600; color: var(--accent-ink);
+}
+.btn:hover { background: var(--hover-bg); }
+.btn.primary { background: var(--brand-blue); border-color: var(--brand-blue); color: #fff; }
+.btn.primary:hover { background: var(--brand-blue-dark); }
+.btn.danger { background: var(--surface); border-color: #f0c7c2; color: var(--err); }
+.btn.danger:hover { background: var(--hover-danger-bg); }
+
+.tree { flex: 1; overflow: auto; padding: 6px 0; min-height: 40px; }
+
+/* Nested "Favorites" block at the top of a tree - not a collapsible
+   sideSection of its own, but a twistable tree node in its own right (same
+   .treeItem.dir chevron the dataset/USS/job trees already use), only
+   present when there's at least one favorite of that kind (toggled via
+   display:none/'' in console.js). Matches the Zowe Explorer VS Code
+   extension's per-view Favorites node. */
+.favBlock { flex: none; max-height: 200px; overflow-y: auto; border-bottom: 1px solid var(--line); }
+.favStar { color: #e0a94a; margin-right: 2px; font-size: 11px; }
+.treeItem {
+  padding: 6px 10px 6px 16px; font-size: 13px; cursor: pointer;
+  display: flex; align-items: center; gap: 6px; white-space: nowrap;
+}
+.treeItem:hover { background: var(--hover-bg); }
+/* Shown while dragging a file from the OS over a valid upload target (a
+   PDS or a USS directory) - wireFileDropTarget() in console.js toggles
+   this on dragover/dragleave/drop. Also applied directly to #ussTree
+   itself for the "drop on empty space" case. */
+.treeItem.dropTargetFile, #ussTree.dropTargetFile {
+  background: var(--active-bg);
+  outline: 2px dashed var(--brand-blue);
+  outline-offset: -2px;
+}
+/* Error-message rows (e.g. loadMembers()'s LMINIT/friendlyZosmfError text)
+   need to wrap instead of inheriting .treeItem's nowrap - a narrow/resized
+   sidebar was clipping even a short message with no way to read the rest. */
+.treeItem.errmsg { white-space: normal; line-height: 1.4; cursor: default; }
+.treeItem.dir::before { content: ">"; font-size: 11px; color: var(--muted); width: 10px; display:inline-block; }
+.treeItem.dir.open::before { content: "v"; }
+.treeItem.member { padding-left: 32px; color: var(--ink); }
+.treeItem.member.new { color: var(--brand-blue); font-style: italic; }
+.treeItem.unsupported { color: var(--muted); cursor: not-allowed; }
+.treeItem.unsupported:hover { background: var(--hover-danger-bg); }
+.treeItem .muted { color: var(--muted); font-size: 11.5px; }
+/* USS directories can nest arbitrarily deep (unlike PDS members, which are
+   always exactly one level under a dataset) - each nested childWrap adds
+   another indent so depth is visible. */
+.treeChildren { padding-left: 14px; }
+
+.mainPane { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+
+/* ---- split-pane editor layout (renderPaneLayout() in console.js) ----
+   .paneRoot holds a binary tree of .paneSplit (row=side-by-side,
+   col=stacked) wrapping .paneLeaf editors, each a fully independent
+   tab bar + editor, same model as VS Code's editor groups/.paneResizer
+   between children mirrors the existing .sideResizer/#shellResizer
+   drag-to-resize pattern. */
+.paneRoot { flex: 1; display: flex; min-height: 0; min-width: 0; }
+.paneSplit { display: flex; flex: 1; min-height: 0; min-width: 0; }
+.paneSplit.row { flex-direction: row; }
+.paneSplit.col { flex-direction: column; }
+/* The resizer bar itself is a wide (7px) invisible hit-area for an easy
+   drag target, same idea as .sideResizer/#shellResizer - but with nothing
+   drawn in it at rest, two side-by-side (or stacked) panes with a single
+   file open each used to look like one continuous editor with no visible
+   seam. A slim always-on ::after line down the middle now marks the actual
+   pane boundary regardless of hover/focus state; hovering/dragging still
+   swells it into the full-width blue highlight as before. */
+.paneResizer { flex: none; background: transparent; position: relative; z-index: 5; }
+.paneResizer.vert { width: 7px; cursor: col-resize; margin: 0 -3px; }
+.paneResizer.horiz { height: 7px; cursor: row-resize; margin: -3px 0; }
+.paneResizer::after { content: ''; position: absolute; background: var(--line); }
+.paneResizer.vert::after { top: 0; bottom: 0; left: 3px; width: 1px; }
+.paneResizer.horiz::after { left: 0; right: 0; top: 3px; height: 1px; }
+.paneResizer:hover, .paneResizer.active { background: var(--brand-blue); opacity: .35; }
+.paneResizer:hover::after, .paneResizer.active::after { background: transparent; }
+.paneLeaf {
+  flex: 1; display: flex; flex-direction: column; min-height: 0; min-width: 0;
+  position: relative; box-shadow: inset 0 0 0 1px transparent;
+}
+/* .paneResizer bars already separate adjacent panes visually - this only
+   needs to mark which one currently has keyboard/typing focus, same idea
+   as a browser's focused-pane outline in a tiled window manager. */
+.paneLeaf.focused { box-shadow: inset 0 0 0 1px var(--brand-blue); }
+
+/* Full-cover overlay shown while dragging a tab/tree item over a pane's
+   editor body - split zones on the outer 25% of each edge, "open here" (no split)
+   in the center. Hidden (pointer-events:none) except mid-drag so it never
+   intercepts normal clicks. */
+.paneDropOverlay {
+  display: none; position: absolute; inset: 0; z-index: 40; pointer-events: none;
+}
+.paneDropOverlay.show { display: block; }
+.paneDropOverlay::before {
+  content: ''; position: absolute; background: var(--brand-blue); opacity: .28;
+  border: 2px solid var(--brand-blue); box-sizing: border-box;
+}
+.paneDropOverlay.zone-center::before { inset: 8px; }
+.paneDropOverlay.zone-left::before { top: 0; bottom: 0; left: 0; width: 50%; }
+.paneDropOverlay.zone-right::before { top: 0; bottom: 0; right: 0; width: 50%; }
+.paneDropOverlay.zone-top::before { left: 0; right: 0; top: 0; height: 50%; }
+.paneDropOverlay.zone-bottom::before { left: 0; right: 0; bottom: 0; height: 50%; }
+
+.tabbar { display: flex; background: var(--bg-soft); border-bottom: 1px solid var(--line); overflow-x: auto; }
+.tabbar .tab {
+  display: flex; align-items: center; gap: 8px;
+  padding: 9px 14px; font-size: 12.5px; border-right: 1px solid var(--line);
+  background: transparent; white-space: nowrap; cursor: grab; color: var(--muted);
+}
+.tabbar .tab:active { cursor: grabbing; }
+.tabbar .tab.dragging { opacity: .4; }
+.tabbar .tab.active { background: var(--surface); color: var(--ink); font-weight: 600; }
+.tabbar .tab .dot { width: 6px; height: 6px; border-radius: 50%; background: #e0a300; display: none; }
+.tabbar .tab.dirty .dot { display: inline-block; }
+.tabbar .tab .lock { font-size: 11px; opacity: .8; }
+/* Close button keeps a normal pointer cursor and its own hover affordance
+   even while the rest of the tab is a drag handle (cursor:grab) - a plain
+   color change was easy to miss, so hovering now fills a small red badge
+   behind the x, matching the "highlighted red" request. */
+.tabbar .tab .x {
+  cursor: pointer; color: var(--muted); font-weight: 700;
+  width: 16px; height: 16px; line-height: 16px; text-align: center;
+  border-radius: 4px; flex: none;
+}
+.tabbar .tab .x:hover { color: #fff; background: var(--err); }
+/* Insertion marker shown while dragging a tab/tree item over the bar,
+   just before the tab it'll land in front of. */
+.tabbar .tab.dropBefore { box-shadow: -2px 0 0 var(--brand-blue) inset; }
+
+.editorWrap {
+  flex: 1; position: relative; background: var(--surface);
+  display: flex; flex-direction: column; min-height: 0; overflow: hidden;
+}
+.emptyState {
+  flex: 1; display: flex; align-items: center; justify-content: center;
+  color: var(--muted); font-size: 14px; text-align: center; padding: 40px;
+}
+
+/* ---- find / replace overlay (Ctrl+F / Ctrl+H in the editor) ---- */
+.findBar {
+  display: none;
+  position: absolute; top: 8px; right: 16px; z-index: 60;
+  width: 280px; padding: 8px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 8px;
+  box-shadow: 0 10px 26px rgba(0,0,0,.2);
+}
+.findBar.show { display: block; }
+.findRow { display: flex; align-items: center; gap: 6px; }
+.findRow + .findRow { margin-top: 6px; }
+.findRow input {
+  flex: 1; min-width: 0; padding: 6px 8px; border: 1px solid var(--line);
+  border-radius: 5px; font-size: 12.5px; background: var(--surface); color: var(--ink);
+}
+/* Twisty chevron for the Replace row, same collapsed-by-default pattern
+   as .sideHead's - Replace stays out of the way until you actually need
+   it, same as the reference screenshots. */
+.findChev {
+  flex: none; font-size: 10px; color: var(--muted); cursor: pointer;
+  user-select: none; display: inline-block; transition: transform .1s;
+}
+.findChev.open { transform: rotate(90deg); }
+.findReplaceRow { display: none; }
+.findReplaceRow.show { display: flex; }
+.findCount { font-size: 11px; color: var(--muted); white-space: nowrap; min-width: 54px; text-align: center; }
+
+/* ---- editor chrome: format toolbar, column ruler, gutter, highlight overlay ---- */
+.edToolbar {
+  display: flex; align-items: center; gap: 8px; padding: 6px 12px; flex: none;
+  background: var(--bg-soft); border-bottom: 1px solid var(--line);
+}
+.edToolbar label { font-size: 11.5px; color: var(--muted); font-weight: 600; }
+.edToolbar select { font-size: 12px; padding: 3px 6px; border: 1px solid var(--line); border-radius: 4px; }
+.edLines { margin-left: auto; font-size: 11.5px; color: var(--muted); }
+.edSyslogStatus { font-size: 11.5px; font-weight: 600; }
+.edSyslogStatus.ok { color: var(--ok); }
+.edSyslogStatus.err { color: var(--err); }
+.edReadOnly { font-size: 11.5px; color: var(--warn-ink); font-weight: 600; }
+
+.edRulerRow { display: flex; flex: none; background: var(--bg-soft); border-bottom: 1px solid var(--line); }
+.edGutterPad { width: 48px; flex: none; border-right: 1px solid var(--line); }
+.edRulerStage { flex: 1; min-width: 0; overflow: hidden; }
+.edRuler {
+  margin: 0; padding: 2px 16px; font-family: "SF Mono", Consolas, "Courier New", monospace;
+  font-size: 11px; line-height: 1.4; color: var(--muted); white-space: pre; will-change: transform;
+}
+.edRuler .mark72 { background: #3a2410; color: #e0a300; }
+.edRuler .mark80 { background: #2a1c3a; color: #c3a6e8; }
+
+.edBody { flex: 1; display: flex; min-height: 0; }
+.edGutter {
+  width: 48px; flex: none; overflow: hidden;
+  background: var(--bg-soft); color: var(--muted); text-align: right;
+  padding: 14px 8px 14px 0; font: 13px/1.5 "SF Mono", Consolas, "Courier New", monospace;
+  white-space: pre; user-select: none; border-right: 1px solid var(--line);
+}
+.edStage { flex: 1; position: relative; min-width: 0; }
+.edHl, .edText {
+  position: absolute; inset: 0; margin: 0; box-sizing: border-box;
+  width: 100%; height: 100%;
+  padding: 14px 16px; font: 13px/1.5 "SF Mono", Consolas, "Courier New", monospace;
+  white-space: pre; overflow: auto;
+}
+.edHl { overflow: hidden; pointer-events: none; color: var(--ink); background: transparent; }
+.edText { resize: none; border: 0; outline: none; background: transparent; color: transparent; caret-color: var(--ink); }
+.edText::selection { background: rgba(0,91,170,.25); }
+
+/* Find-match highlight layer - sits between the syntax-highlighted text
+   (edHl) and the actual textarea, same trick as edHl itself: invisible
+   text just for layout, with only the <mark> backgrounds actually
+   visible, painted over the syntax colors rather than replacing them. */
+.edFindHl {
+  position: absolute; inset: 0; margin: 0; box-sizing: border-box;
+  width: 100%; height: 100%;
+  padding: 14px 16px; font: 13px/1.5 "SF Mono", Consolas, "Courier New", monospace;
+  white-space: pre; overflow: hidden; pointer-events: none; color: transparent;
+}
+/* Semi-transparent - this layer paints over the syntax-colored text layer
+   beneath it, so an opaque mark background would hide the letters instead
+   of highlighting them. */
+.edFindHl mark { background: rgba(255, 213, 74, .45); color: transparent; border-radius: 2px; }
+html[data-theme="dark"] .edFindHl mark { background: rgba(255, 183, 3, .4); }
+
+/* Vertical column guides at 72/80 (VS Code / Zowe-extension style), drawn
+   over the text - positioned in JS from a measured character width, see
+   positionGuides() in console.js. Separate from the horizontal ruler strip
+   above the editor. */
+.edGuides { position: absolute; inset: 0; overflow: hidden; pointer-events: none; }
+.edGuideLine { position: absolute; top: 0; bottom: 0; width: 1px; }
+.edGuideLine.mark72 { background: rgba(224,163,0,.65); }
+.edGuideLine.field { background: var(--guide-field); }
+
+.tok-cmt { color: var(--tok-cmt); }
+.tok-str { color: var(--tok-str); }
+.tok-kw { color: var(--tok-kw); font-weight: 600; }
+.tok-name { color: var(--tok-name); }
+.tok-num { color: var(--tok-num); }
+.tok-label { color: var(--tok-label); font-weight: 600; }
+
+/* clipboard bar */
+#clipBar {
+  display: none; align-items: center; justify-content: space-between;
+  padding: 8px 12px; background: var(--warn-bg); border-top: 1px solid var(--warn-border);
+  font-size: 12.5px; color: var(--warn-ink);
+}
+#clipBar.show { display: flex; }
+#clipBar button { background: transparent; border: 0; color: var(--warn-ink); font-weight: 700; font-size: 13px; }
+
+/* context menu */
+#ctx {
+  display: none; position: fixed; z-index: 1000;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.18); min-width: 190px; padding: 4px 0;
+  max-height: calc(100vh - 20px); overflow-y: auto;
+}
+#ctx.show { display: block; }
+#ctx .ci { padding: 8px 14px; font-size: 13px; cursor: pointer; user-select: none; color: var(--ink); }
+#ctx .ci:hover { background: var(--hover-bg); }
+#ctx .sep { height: 1px; background: var(--line); margin: 4px 0; }
+
+/* ==================== JOBS TREE ==================== */
+/* Status pills reused on the job row inside the tree (see .treeItem above);
+   the old table + dropdown spool viewer is gone - spool files are now DD
+   child rows under each job, opened as read-only tabs (see
+   .tabbar .tab .lock above and renderTabsFor() in console.js). */
+.pill { padding: 2px 9px; border-radius: 999px; font-size: 11px; font-weight: 700; }
+.pill.OUTPUT { background: var(--ok-bg); color: var(--ok); }
+.pill.ACTIVE { background: var(--active-bg); color: var(--accent-ink); }
+.pill.other { background: var(--bg-soft); color: var(--muted); }
+
+/* new dataset dialog */
+.modalBg {
+  display: none; position: fixed; inset: 0; background: rgba(11,31,51,.45);
+  align-items: center; justify-content: center; z-index: 900;
+}
+.modalBg.show { display: flex; }
+.modal { background: var(--surface); border-radius: 10px; width: 420px; max-width: 92vw; padding: 22px 24px; }
+.modal h3 { margin: 0 0 16px; font-size: 16px; color: var(--brand-navy); }
+html[data-theme="dark"] .modal h3 { color: var(--ink); }
+.modal label { display: block; font-size: 12px; font-weight: 600; color: var(--brand-navy); margin: 12px 0 5px; }
+html[data-theme="dark"] .modal label { color: var(--ink); }
+.modal input, .modal select {
+  width: 100%; padding: 8px 10px; border: 1px solid var(--line); border-radius: 5px; font-size: 13px;
+}
+.modal .row3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.modal .row2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
+.modal .actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 22px; }
+.modal .info { font-size: 12px; color: var(--muted); margin-top: 10px; min-height: 16px; }
+
+/* info / attributes modal (Show Attributes) */
+.infoBody {
+  margin: 0; white-space: pre-wrap; word-break: break-word;
+  font: 12.5px/1.6 "SF Mono", Consolas, "Courier New", monospace;
+  background: var(--bg-soft); border: 1px solid var(--line); border-radius: 6px;
+  padding: 12px 14px; max-height: 320px; overflow: auto; color: var(--ink);
+}
+
+/* compare / diff modal (Select for Compare) */
+.modal.compareModal { width: 920px; max-width: 95vw; }
+.compareHead {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+  font-size: 12px; font-weight: 700; color: var(--muted);
+  padding-bottom: 6px; border-bottom: 1px solid var(--line); margin-bottom: 6px;
+  word-break: break-all;
+}
+.comparePanes {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 10px;
+  max-height: 55vh;
+}
+.comparePane {
+  margin: 0; overflow: auto; background: var(--bg-soft); border: 1px solid var(--line); border-radius: 6px;
+  padding: 8px 0; font: 12px/1.5 "SF Mono", Consolas, "Courier New", monospace;
+}
+.diffLine { padding: 0 10px; white-space: pre-wrap; word-break: break-word; }
+.diffAdd { background: var(--ok-bg); }
+.diffDel { background: var(--err-bg); }
+.diffPad { background: var(--bg-soft); opacity: .4; }
+
+/* ==================== PROFILE POPOVER ==================== */
+.popover {
+  display: none; position: absolute; top: 100%; right: 20px; margin-top: 6px;
+  background: var(--surface); border: 1px solid var(--line); border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0,0,0,.18); width: 280px; padding: 14px 16px; z-index: 800;
+}
+.popover.show { display: block; }
+.profileRow { display: flex; justify-content: space-between; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+.profileLabel { color: var(--muted); }
+/* Explicit color needed here - .popover now lives inside <header>, which
+   sets color:#fff for its own nav text, and without its own color this
+   was inheriting that white instead of the theme's ink color. Invisible
+   on the light theme's white popover surface (looked fine in dark mode
+   purely by coincidence, since white ~= the dark theme's ink color). */
+.profileValue { font-weight: 600; color: var(--ink); }
+.popover label {
+  display: block; font-size: 11.5px; font-weight: 600; color: var(--brand-navy);
+  margin: 14px 0 8px; text-transform: uppercase; letter-spacing: .04em;
+}
+html[data-theme="dark"] .popover label { color: var(--ink); }
+.themeChoice { display: flex; gap: 8px; }
+.themeOpt {
+  flex: 1; padding: 10px; border: 1px solid var(--line); border-radius: 6px;
+  background: var(--surface); font-size: 13px; font-weight: 600; color: var(--muted);
+}
+.themeOpt:hover { background: var(--bg-soft); }
+.themeOpt.active { border-color: var(--brand-blue); color: var(--brand-blue-dark); background: var(--active-bg); }
+html[data-theme="dark"] .themeOpt.active { color: #9cc7ff; }

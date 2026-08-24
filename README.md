@@ -2,7 +2,9 @@
 
 Browser-based dataset, USS, and job management for z/OS, built entirely on IBM z/OSMF REST APIs.
 
-Reference environment: z/OS V3R2, z/OSMF v30
+Reference environment: `yourhost.example.com` (z/OS V3R2, z/OSMF v30)
+
+**Just installing this?** Skip cloning the repo - download the console archive from the [latest Release](../../releases/latest) and jump straight to [Part D.3](#d3-upload-the-single-archive). Cloning the repo is only needed if you're building your own customized copy - see [Part D.2](#d2-build-the-deployment-archive).
 
 ## Contents
 
@@ -249,13 +251,20 @@ Because the certificate from C.1 is self-signed, browsers will show a security w
 
 ## Part D - Deploying the Console Application Files
 
-The console is entirely static files - no build step, no server-side code. Deploying it means copying `zos/site/` (renamed from this repo's root `site/` in the extracted layout - see note below) and `console/` into IHS's DocumentRoot on z/OS.
+The console is entirely static files - no build step, no server-side code. Deploying it means getting `site/index.html` and everything in `console/` into IHS's DocumentRoot on z/OS.
 
-> **Note on paths:** this repository was split out of a larger monorepo, so the files referenced below live at `site/` and `console/` at the root of *this* repository (previously `zos/site/` and `zos/console/` in the combined repo). Adjust the local paths in the commands below to match wherever you've checked this repository out.
+> **Note on paths:** this repository was split out of a larger monorepo, so the files referenced below live at `site/` and `console/` at the root of *this* repository. Adjust the local paths in the commands below to match wherever you've checked this repository out.
+
+Rather than uploading each file with its own curl command (five separate round trips, five chances to typo a path), this deploys as **one archive** - upload that single file, then extract it directly on the mainframe. Fewer commands, fewer things to get wrong mid-install.
+
+Two ways to get that archive:
+
+- **Installing a released version (most people):** download the `.tar` asset from the [latest Release](../../releases/latest) (or any tagged release) - no `git clone` needed at all. Skip straight to [D.3](#d3-upload-the-single-archive).
+- **Deploying your own build from source** (after cloning this repo, possibly with your own changes): build the archive yourself in [D.2](#d2-build-the-deployment-archive) below.
 
 ### D.1 What gets deployed, and where
 
-| Local file | USS destination | Notes |
+| Local file | Final USS destination | Notes |
 |---|---|---|
 | `site/index.html` | `/etc/wwwsvr1/htdocs/index.html` | Landing page |
 | `console/index.html` | `/etc/wwwsvr1/htdocs/console/index.html` | Console shell |
@@ -263,57 +272,62 @@ The console is entirely static files - no build step, no server-side code. Deplo
 | `console/console.js` | `/etc/wwwsvr1/htdocs/console/console.js` | Application logic |
 | `console/console.css` | `/etc/wwwsvr1/htdocs/console/console.css` | Styles |
 
-> **Why curl:** This guide deploys using curl rather than a CLI tool that needs installing. curl ships built in with Windows 10/11, macOS, and virtually every Linux distribution, so there is nothing to install, download, or get approved on a locked-down corporate laptop. It talks to z/OSMF's Files REST API directly - the exact same API a purpose-built tool like Zowe CLI would call, just without the extra layer. If you do already have Node.js/npm available and would prefer Zowe CLI's friendlier command syntax, an equivalent set of commands is in [Appendix B](#appendix-b---alternative-deploying-with-zowe-cli) - but nothing in this guide requires installing anything beyond what your workstation already has.
+> **Why curl and tar:** both ship built in with Windows 10/11 (`tar.exe` since Windows 10 1803), macOS, and virtually every Linux distribution - nothing to install, download, or get approved on a locked-down corporate laptop. curl talks to z/OSMF's Files REST API directly, the same API a purpose-built tool like Zowe CLI would call. If you already have Node.js/npm available and prefer Zowe CLI, see [Appendix B](#appendix-b---alternative-deploying-with-zowe-cli) - the same single-archive approach works there too, just swap the upload command.
 
 Every command below authenticates directly against z/OSMF on its own port (10443 in the reference environment) - not through the IHS reverse proxy - using your own z/OS userid and password. Replace `USERID` and the local file paths with your own before running them. `-k` skips certificate validation, needed only because the reference z/OSMF instance's certificate is not signed by a CA your workstation trusts; drop it if yours is.
 
-> **On typing your password:** these commands use `-u "USERID"` (no `:PASSWORD` after it) on purpose - curl then prompts for the password interactively instead of it appearing in the command itself. Typing `-u "USERID:PASSWORD"` puts the password in your shell's command history in plaintext, and if you ever paste a command like that into a chat, ticket, or screen share, that password should be treated as compromised and rotated. If you're running many of these in a row and don't want to retype the password every time, an `_netrc` file (PowerShell: `$env:USERPROFILE\_netrc`) is a safer alternative than typing it inline - see curl's own documentation for the format.
+> **On typing your password:** these commands use `-u "USERID"` (no `:PASSWORD` after it) on purpose - curl then prompts for the password interactively instead of it appearing in the command itself. Typing `-u "USERID:PASSWORD"` puts the password in your shell's command history in plaintext, and if you ever paste a command like that into a chat, ticket, or screen share, that password should be treated as compromised and rotated. If you're running many uploads in a row and don't want to retype the password every time, an `_netrc` file (PowerShell: `$env:USERPROFILE\_netrc`) is a safer alternative than typing it inline - see curl's own documentation for the format.
 
-### D.2 Create the destination directories
+### D.2 Build the deployment archive
 
-On a fresh install `/etc/wwwsvr1/htdocs/console` does not exist yet, and an upload into a directory that doesn't exist fails - create the path once, first:
+Skip this step if you downloaded a `.tar` asset from a [Release](../../releases/latest) instead - go straight to D.3 with that file. This step is only for building your own archive from a cloned (and possibly modified) copy of this repo.
 
-```
-curl.exe -k -u "USERID" -X POST "https://yourhost.example.com:10443/zosmf/restfiles/fs/etc/wwwsvr1/htdocs" -H "X-CSRF-ZOSMF-HEADER: true" -H "Origin: https://yourhost.example.com:10443" -H "Referer: https://yourhost.example.com:10443/zosmf/" -H "Content-Type: application/json" -d "{\"type\":\"directory\",\"mode\":\"rwxr-xr-x\"}"
+From PowerShell, at the root of this repository:
 
-curl.exe -k -u "USERID" -X POST "https://yourhost.example.com:10443/zosmf/restfiles/fs/etc/wwwsvr1/htdocs/console" -H "X-CSRF-ZOSMF-HEADER: true" -H "Origin: https://yourhost.example.com:10443" -H "Referer: https://yourhost.example.com:10443/zosmf/" -H "Content-Type: application/json" -d "{\"type\":\"directory\",\"mode\":\"rwxr-xr-x\"}"
-```
-
-`mode rwxr-xr-x` (755) makes each directory world-readable/executable so IHS - which runs under its own started-task userid, not yours - can traverse into it and serve files back out; without it, files can upload successfully yet still 403 in the browser. If `/etc/wwwsvr1/htdocs` already exists (it will, on any system where IHS is already serving a DocumentRoot from it), the first command returns an "already exists" error - that's fine, skip it and just create the console subdirectory.
-
-### D.3 Upload each file
-
-Text files need `X-IBM-Data-Type: text;fileEncoding=IBM-1047` so z/OSMF converts them to EBCDIC correctly; binary files (images) need `X-IBM-Data-Type: binary` instead, or the upload will corrupt them.
-
-**Text file example:**
-
-```
-curl.exe -k -u "USERID" -X PUT "https://yourhost.example.com:10443/zosmf/restfiles/fs/etc/wwwsvr1/htdocs/console/index.html" -H "X-CSRF-ZOSMF-HEADER: true" -H "Origin: https://yourhost.example.com:10443" -H "Referer: https://yourhost.example.com:10443/zosmf/" -H "X-IBM-Data-Type: text;fileEncoding=IBM-1047" --data-binary "@console\index.html"
+```powershell
+mkdir deploy-stage\console
+copy site\index.html deploy-stage\
+copy console\index.html, console\login.html, console\console.js, console\console.css deploy-stage\console\
+tar -cf deploy.tar -C deploy-stage .
 ```
 
-**Binary file example** (for images or other non-text assets you add):
+This lays the files out in `deploy-stage\` exactly matching their final destination under `/etc/wwwsvr1/htdocs/` (console files nested under a `console\` subfolder, the landing page at the top level), then archives that whole layout into one `deploy.tar`. `-C deploy-stage` makes the paths inside the archive relative to `deploy-stage\` (`index.html`, `console\index.html`, etc.) rather than including the `deploy-stage\` folder name itself - that matters for D.4 below, since it means extracting the archive on the mainframe drops files straight into the current directory instead of into an extra nested folder.
+
+### D.3 Upload the single archive
+
+The archive itself must go up as **binary** (`X-IBM-Data-Type: binary`) - it's not text, and letting z/OSMF attempt an EBCDIC conversion on it would corrupt the archive structure. The individual files inside get converted to EBCDIC separately, after extraction, in D.4.
 
 ```
-curl.exe -k -u "USERID" -X PUT "https://yourhost.example.com:10443/zosmf/restfiles/fs/etc/wwwsvr1/htdocs/console/your-image.png" -H "X-CSRF-ZOSMF-HEADER: true" -H "Origin: https://yourhost.example.com:10443" -H "Referer: https://yourhost.example.com:10443/zosmf/" -H "X-IBM-Data-Type: binary" --data-binary "@console\your-image.png"
+curl.exe -k -u "USERID" -X PUT "https://yourhost.example.com:10443/zosmf/restfiles/fs/etc/wwwsvr1/htdocs/deploy.tar" -H "X-CSRF-ZOSMF-HEADER: true" -H "Origin: https://yourhost.example.com:10443" -H "Referer: https://yourhost.example.com:10443/zosmf/" -H "X-IBM-Data-Type: binary" --data-binary "@deploy.tar"
 ```
 
-The rest of the files, changing only the destination path, the local file, and the data-type header as shown:
+`/etc/wwwsvr1/htdocs` needs to already exist for this to succeed - it will on any system where IHS is already serving a DocumentRoot from it (which Part A/B assumes by this point). If you're deploying to a brand-new path that doesn't exist yet, create it first with a POST the same way earlier versions of this guide did (see [Appendix A](#appendix-a---full-command-reference) for that command if needed).
 
-| Local file | USS destination | X-IBM-Data-Type |
-|---|---|---|
-| `site/index.html` | `/etc/wwwsvr1/htdocs/index.html` | `text;fileEncoding=IBM-1047` |
-| `console/index.html` | `/etc/wwwsvr1/htdocs/console/index.html` | `text;fileEncoding=IBM-1047` |
-| `console/login.html` | `/etc/wwwsvr1/htdocs/console/login.html` | `text;fileEncoding=IBM-1047` |
-| `console/console.js` | `/etc/wwwsvr1/htdocs/console/console.js` | `text;fileEncoding=IBM-1047` |
-| `console/console.css` | `/etc/wwwsvr1/htdocs/console/console.css` | `text;fileEncoding=IBM-1047` |
+### D.4 Extract and fix encoding on the mainframe
 
-### D.4 Verify the upload
+From OMVS (or an SSH session into USS):
+
+```sh
+cd /etc/wwwsvr1/htdocs
+pax -rf deploy.tar -x tar
+for f in index.html console/index.html console/login.html console/console.js console/console.css; do
+  iconv -f ISO8859-1 -t IBM-1047 "$f" > "$f.tmp" && mv "$f.tmp" "$f"
+  chtag -tc IBM-1047 "$f"
+done
+rm deploy.tar
+```
+
+`pax -rf deploy.tar -x tar` extracts the archive in place - it creates the `console/` subdirectory itself, so there's no separate "make the destination directory first" step at all with this approach. The archive itself arrived as plain ASCII/UTF-8 text (however it was saved on your Windows workstation), which the `for` loop then converts to EBCDIC (`IBM-1047`) file by file with `iconv`, exactly matching what the old per-file curl uploads' `X-IBM-Data-Type: text;fileEncoding=IBM-1047` header used to do automatically - `chtag -tc IBM-1047` afterward tags each file with that encoding so z/OS UNIX's own auto-conversion (and other tools that check the tag) treat it correctly. `rm deploy.tar` cleans up the archive once its contents are in place - there's no reason to leave a copy of it sitting in the DocumentRoot.
+
+If your system's `pax` supports the `-o to=,from=` conversion option, `pax -rf deploy.tar -x tar -o to=IBM-1047,from=ISO8859-1` can do the extraction and encoding conversion in a single command instead of the loop above - but the `iconv`/`chtag` sequence above is guaranteed to work on any z/OS UNIX release, so that's what this guide leads with.
+
+### D.5 Verify the upload
 
 ```
 curl.exe -k -u "USERID" "https://yourhost.example.com:10443/zosmf/restfiles/fs?path=/etc/wwwsvr1/htdocs/console" -H "Origin: https://yourhost.example.com:10443" -H "Referer: https://yourhost.example.com:10443/zosmf/"
 ```
 
-Confirm all six console files are listed with non-zero sizes (GET calls don't need the `X-CSRF-ZOSMF-HEADER` - that's only required on PUT/POST/DELETE). A full end-to-end check is easiest via the browser once IHS is up (Part E).
+Confirm all four console files are listed with non-zero sizes (GET calls don't need the `X-CSRF-ZOSMF-HEADER` - that's only required on PUT/POST/DELETE). A full end-to-end check is easiest via the browser once IHS is up (Part E).
 
 ## Part E - First-Time Login & Verification
 
@@ -381,20 +395,42 @@ SETROPTS RACLIST(RDATALIB) REFRESH
 curl.exe -ik https://yourhost.example.com:8443/zosmf/info
 ```
 
-### Part D - Deploying the Console (curl)
+### Part D - Deploying the Console (single archive)
+
+PowerShell, at the repo root:
+
+```powershell
+mkdir deploy-stage\console
+copy site\index.html deploy-stage\
+copy console\index.html, console\login.html, console\console.js, console\console.css deploy-stage\console\
+tar -cf deploy.tar -C deploy-stage .
+```
+
+Upload the one archive:
 
 ```
-curl.exe -k -u "USERID" -X POST "https://yourhost.example.com:10443/zosmf/restfiles/fs/etc/wwwsvr1/htdocs" -H "X-CSRF-ZOSMF-HEADER: true" -H "Origin: https://yourhost.example.com:10443" -H "Referer: https://yourhost.example.com:10443/zosmf/" -H "Content-Type: application/json" -d "{\"type\":\"directory\",\"mode\":\"rwxr-xr-x\"}"
-curl.exe -k -u "USERID" -X POST "https://yourhost.example.com:10443/zosmf/restfiles/fs/etc/wwwsvr1/htdocs/console" -H "X-CSRF-ZOSMF-HEADER: true" -H "Origin: https://yourhost.example.com:10443" -H "Referer: https://yourhost.example.com:10443/zosmf/" -H "Content-Type: application/json" -d "{\"type\":\"directory\",\"mode\":\"rwxr-xr-x\"}"
+curl.exe -k -u "USERID" -X PUT "https://yourhost.example.com:10443/zosmf/restfiles/fs/etc/wwwsvr1/htdocs/deploy.tar" -H "X-CSRF-ZOSMF-HEADER: true" -H "Origin: https://yourhost.example.com:10443" -H "Referer: https://yourhost.example.com:10443/zosmf/" -H "X-IBM-Data-Type: binary" --data-binary "@deploy.tar"
+```
 
-curl.exe -k -u "USERID" -X PUT "https://yourhost.example.com:10443/zosmf/restfiles/fs/etc/wwwsvr1/htdocs/index.html" -H "X-CSRF-ZOSMF-HEADER: true" -H "Origin: https://yourhost.example.com:10443" -H "Referer: https://yourhost.example.com:10443/zosmf/" -H "X-IBM-Data-Type: text;fileEncoding=IBM-1047" --data-binary "@site\index.html"
-curl.exe -k -u "USERID" -X PUT "https://yourhost.example.com:10443/zosmf/restfiles/fs/etc/wwwsvr1/htdocs/console/index.html" -H "X-CSRF-ZOSMF-HEADER: true" -H "Origin: https://yourhost.example.com:10443" -H "Referer: https://yourhost.example.com:10443/zosmf/" -H "X-IBM-Data-Type: text;fileEncoding=IBM-1047" --data-binary "@console\index.html"
-curl.exe -k -u "USERID" -X PUT "https://yourhost.example.com:10443/zosmf/restfiles/fs/etc/wwwsvr1/htdocs/console/login.html" -H "X-CSRF-ZOSMF-HEADER: true" -H "Origin: https://yourhost.example.com:10443" -H "Referer: https://yourhost.example.com:10443/zosmf/" -H "X-IBM-Data-Type: text;fileEncoding=IBM-1047" --data-binary "@console\login.html"
-curl.exe -k -u "USERID" -X PUT "https://yourhost.example.com:10443/zosmf/restfiles/fs/etc/wwwsvr1/htdocs/console/console.js" -H "X-CSRF-ZOSMF-HEADER: true" -H "Origin: https://yourhost.example.com:10443" -H "Referer: https://yourhost.example.com:10443/zosmf/" -H "X-IBM-Data-Type: text;fileEncoding=IBM-1047" --data-binary "@console\console.js"
-curl.exe -k -u "USERID" -X PUT "https://yourhost.example.com:10443/zosmf/restfiles/fs/etc/wwwsvr1/htdocs/console/console.css" -H "X-CSRF-ZOSMF-HEADER: true" -H "Origin: https://yourhost.example.com:10443" -H "Referer: https://yourhost.example.com:10443/zosmf/" -H "X-IBM-Data-Type: text;fileEncoding=IBM-1047" --data-binary "@console\console.css"
+Extract and fix encoding, from OMVS:
 
+```sh
+cd /etc/wwwsvr1/htdocs
+pax -rf deploy.tar -x tar
+for f in index.html console/index.html console/login.html console/console.js console/console.css; do
+  iconv -f ISO8859-1 -t IBM-1047 "$f" > "$f.tmp" && mv "$f.tmp" "$f"
+  chtag -tc IBM-1047 "$f"
+done
+rm deploy.tar
+```
+
+Verify:
+
+```
 curl.exe -k -u "USERID" "https://yourhost.example.com:10443/zosmf/restfiles/fs?path=/etc/wwwsvr1/htdocs/console" -H "Origin: https://yourhost.example.com:10443" -H "Referer: https://yourhost.example.com:10443/zosmf/"
 ```
+
+(If `/etc/wwwsvr1/htdocs` doesn't exist yet on a brand-new install, create it first: `curl.exe -k -u "USERID" -X POST "https://yourhost.example.com:10443/zosmf/restfiles/fs/etc/wwwsvr1/htdocs" -H "X-CSRF-ZOSMF-HEADER: true" -H "Origin: https://yourhost.example.com:10443" -H "Referer: https://yourhost.example.com:10443/zosmf/" -H "Content-Type: application/json" -d "{\"type\":\"directory\",\"mode\":\"rwxr-xr-x\"}"` - `pax` creates the `console` subdirectory itself during extraction, so nothing further is needed beyond that.)
 
 ## Appendix B - Alternative: Deploying with Zowe CLI
 
@@ -421,24 +457,34 @@ zowe profiles create zosmf-profile ZOS1 ^
 
 (`--reject-unauthorized false` is only needed while the z/OSMF certificate itself is self-signed/untrusted from the workstation's point of view.)
 
-### B.2 Create the destination directories
+### B.2 Build and upload the single archive
 
-```
-zowe zos-files create uss-directory "/etc/wwwsvr1/htdocs" --mode rwxr-xr-x --zosmf-profile ZOS1
-zowe zos-files create uss-directory "/etc/wwwsvr1/htdocs/console" --mode rwxr-xr-x --zosmf-profile ZOS1
-```
+Same staging/archive step as [Part D.2](#d2-build-the-deployment-archive):
 
-### B.3 Upload each file
-
-```
-zowe zos-files upload file-to-uss "site\index.html" "/etc/wwwsvr1/htdocs/index.html" --encoding IBM-1047 --zosmf-profile ZOS1
-zowe zos-files upload file-to-uss "console\index.html" "/etc/wwwsvr1/htdocs/console/index.html" --encoding IBM-1047 --zosmf-profile ZOS1
-zowe zos-files upload file-to-uss "console\login.html" "/etc/wwwsvr1/htdocs/console/login.html" --encoding IBM-1047 --zosmf-profile ZOS1
-zowe zos-files upload file-to-uss "console\console.js" "/etc/wwwsvr1/htdocs/console/console.js" --encoding IBM-1047 --zosmf-profile ZOS1
-zowe zos-files upload file-to-uss "console\console.css" "/etc/wwwsvr1/htdocs/console/console.css" --encoding IBM-1047 --zosmf-profile ZOS1
+```powershell
+mkdir deploy-stage\console
+copy site\index.html deploy-stage\
+copy console\index.html, console\login.html, console\console.js, console\console.css deploy-stage\console\
+tar -cf deploy.tar -C deploy-stage .
 ```
 
-Text files need `--encoding IBM-1047`; binary files (images) need `--binary` instead.
+```
+zowe zos-files upload file-to-uss "deploy.tar" "/etc/wwwsvr1/htdocs/deploy.tar" --binary --zosmf-profile ZOS1
+```
+
+### B.3 Extract and fix encoding
+
+Same as [Part D.4](#d4-extract-and-fix-encoding-on-the-mainframe) - this part doesn't change based on which tool did the upload, since it all happens in OMVS after the fact:
+
+```sh
+cd /etc/wwwsvr1/htdocs
+pax -rf deploy.tar -x tar
+for f in index.html console/index.html console/login.html console/console.js console/console.css; do
+  iconv -f ISO8859-1 -t IBM-1047 "$f" > "$f.tmp" && mv "$f.tmp" "$f"
+  chtag -tc IBM-1047 "$f"
+done
+rm deploy.tar
+```
 
 ### B.4 Verify the upload
 
@@ -449,5 +495,6 @@ zowe zos-files list uss-file "/etc/wwwsvr1/htdocs/console" --zosmf-profile ZOS1
 ## Appendix C - Known Limitations & Open Items
 
 - The `:8443` certificate is self-signed - browsers will show a trust warning until it's replaced with one issued by a trusted CA, or accepted once per browser.
+- This repository was split out from a combined monorepo that also contained an earlier MVS 3.8j/Hercules (TK5) project - that legacy material now lives separately and is unrelated to this z/OS deployment.
 - A few z/OSMF endpoints the console uses (the TSO/E `v1/tso` single-command API, the Consoles REST API for MVS operator commands, and the SYSLOG hardcopy-log API) are implemented against IBM's published documentation but had not been exercised end-to-end on every environment at the time of writing. Test Issue TSO Command and operator-command actions with something harmless first (e.g. `TIME`) in a new environment.
 - z/OSMF's Files REST API "list members of a data set" call uses ISPF Library Management services under the caller's own userid, which needs that user's ISPF profile dataset. Expanding a PDS whose members can't currently be listed (most commonly the user's own `<userid>.ISPF.PROFILE` while an ISPF/TSO session is active elsewhere) will show an LMINIT/ISRZ002 error - this is expected z/OSMF/ISPF behaviour, not a defect in the console.

@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>z/OS Gateway</title>
+<link rel="stylesheet" href="console.css">
+</head>
+<body>
+
+<header>
+  <div class="brand">
+    <a href="../"><span class="brandMark">z/OS Gateway</span></a>
+  </div>
+  <div class="who">
+    <button id="syslogBtn" title="Open a live-updating SYSLOG tab">Syslog</button>
+    <button id="tsoBtn" title="Issue a TSO command">TSO&hellip;</button>
+    <button id="profileBtn" class="whoBtn" title="Profile &amp; appearance">
+      <svg class="avatarIcon" viewBox="0 0 24 24" width="20" height="20" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+        <circle cx="12" cy="12" r="12" fill="currentColor" opacity=".28"/>
+        <circle cx="12" cy="9.6" r="3.6" fill="currentColor"/>
+        <path d="M4.4 20.2c1.2-3.7 4.5-5.7 7.6-5.7s6.4 2 7.6 5.7" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" fill="none"/>
+      </svg>
+      <span id="whoLabel" class="srOnly">&nbsp;</span>
+    </button>
+    <button id="logoutBtn">Sign out</button>
+  </div>
+
+  <!-- ==================== Profile popover ====================
+       Nested inside <header> (which is position:relative) so this
+       position:absolute popover anchors under the profile button - it
+       was previously a sibling of <header>, which left it with no
+       positioned ancestor at all, so it rendered pinned to the bottom
+       of the whole page instead of under the button that opens it. -->
+  <div id="profilePop" class="popover">
+    <div class="profileRow">
+      <span class="profileLabel">Signed in as</span>
+      <span class="profileValue" id="profileUser">&nbsp;</span>
+    </div>
+    <div class="profileRow">
+      <span class="profileLabel">Host</span>
+      <span class="profileValue" id="profileHost">&nbsp;</span>
+    </div>
+    <label>Appearance</label>
+    <div class="themeChoice">
+      <button class="themeOpt" id="themeOptLight" data-theme="light">Light</button>
+      <button class="themeOpt" id="themeOptDark" data-theme="dark">Dark</button>
+    </div>
+  </div>
+</header>
+
+<div id="msg"></div>
+
+<!-- ==================== job-submitted toasts ==================== -->
+<div id="jobToasts" class="jobToasts"></div>
+
+<!-- ==================== shell: sidebar + editor ==================== -->
+<div class="shell">
+  <div class="sidebar">
+
+    <!-- ---- Data Sets ---- -->
+    <div class="sideSection open" id="secDatasets">
+      <div class="sideHead"><span class="chev">&#9662;</span><span class="sideTitle">Data Sets</span></div>
+      <div class="sideBody">
+        <div class="filterRow">
+          <input type="text" id="hlqFilter" placeholder="HLQ, e.g. YOURID.* or *.COBOL" autocapitalize="off">
+          <button class="btn primary" id="listBtn">List</button>
+        </div>
+        <div class="toolbar">
+          <button class="btn" id="newDsBtn">+ New&hellip;</button>
+          <button class="btn" id="refreshBtn">Refresh</button>
+        </div>
+        <!-- Not a collapsible sideSection of its own - a fixed, always-shown
+             block nested at the top of this tree, same as the Zowe Explorer
+             VS Code extension's per-view "Favorites" node. -->
+        <div id="dsFavTree" class="favBlock"></div>
+        <div id="dsTree" class="tree"></div>
+        <div id="clipBar">
+          <span id="clipText"></span>
+          <button id="clipClear">&times; clear</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="sideResizer"></div>
+
+    <!-- ---- USS ---- -->
+    <div class="sideSection open" id="secUss">
+      <div class="sideHead"><span class="chev">&#9662;</span><span class="sideTitle">Unix System Services (USS)</span></div>
+      <div class="sideBody">
+        <div class="ussBar">
+          <span class="ussCurPath" id="ussCurPath">/</span>
+          <button class="iconBtn" id="ussUpBtn" title="Up one level">&#8593;</button>
+          <button class="iconBtn" id="ussRefreshBtn" title="Refresh">&#8635;</button>
+          <button class="iconBtn" id="ussSearchBtn" title="Search / recent paths">&#128269;</button>
+        </div>
+        <div class="popover ussFilterPop" id="ussFilterPop">
+          <input type="text" id="ussPathFilter" placeholder="Select a filter or type to create a new one" autocapitalize="off">
+          <div class="ci ussFilterCreate" id="ussFilterGo">+ Go to this path</div>
+          <div class="ussFilterRecentLabel">Recent Filters</div>
+          <div id="ussRecentList"></div>
+        </div>
+        <div id="ussFavTree" class="favBlock"></div>
+        <div id="ussTree" class="tree"></div>
+      </div>
+    </div>
+
+    <div class="sideResizer"></div>
+
+    <!-- ---- Jobs ---- -->
+    <div class="sideSection open" id="secJobs">
+      <div class="sideHead"><span class="chev">&#9662;</span><span class="sideTitle">Jobs</span></div>
+      <div class="sideBody">
+        <div class="filterRow">
+          <input type="text" id="jobFilter" placeholder="jobname or pattern, e.g. YOURID*">
+          <button class="btn primary" id="jobsListBtn">List</button>
+        </div>
+        <div class="toolbar">
+          <button class="btn" id="jobsRefreshBtn">Refresh</button>
+          <button class="iconBtn" id="jobsSearchBtn" title="Search Jobs (Owner / Prefix / Status)">&#128269;</button>
+          <button class="iconBtn" id="jobsPollBtn" title="Start Polling Active Jobs">&#9654;</button>
+          <select id="jobSortSelect" class="sortSelect" title="Sort Jobs">
+            <option value="">Sort: Default</option>
+            <option value="id">Sort: Job ID</option>
+            <option value="name">Sort: Name</option>
+            <option value="retcode">Sort: Return Code</option>
+          </select>
+        </div>
+        <div class="popover jobSearchPop" id="jobSearchPop">
+          <label>Owner</label>
+          <input type="text" id="jobSearchOwner" placeholder="* or userid" autocapitalize="off">
+          <label>Prefix</label>
+          <input type="text" id="jobSearchPrefix" placeholder="* or jobname prefix" autocapitalize="off">
+          <label>Status</label>
+          <select id="jobSearchStatus">
+            <option value="">All (active + output)</option>
+            <option value="ACTIVE">Active only</option>
+            <option value="OUTPUT">Output (completed)</option>
+            <option value="INPUT">Input (queued)</option>
+          </select>
+          <button class="btn primary" id="jobSearchGo" style="width:100%;margin-top:4px;">Search</button>
+          <div class="ussFilterRecentLabel" style="margin-top:10px;">Recent Searches</div>
+          <div id="jobSearchRecentList"></div>
+        </div>
+        <div id="jobFavTree" class="favBlock"></div>
+        <div id="jobTree" class="tree"></div>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="shellResizer" id="shellResizer"></div>
+
+  <div class="mainPane" id="mainPane">
+    <!-- Populated entirely by renderPaneLayout() in console.js - a binary
+         split tree of .paneLeaf editors (each with its own tab bar), same
+         model as VS Code's editor groups. See the "split-pane editor
+         layout" section of console.js. -->
+    <div class="paneRoot" id="paneRoot"></div>
+  </div>
+</div>
+
+<!-- ==================== context menu ==================== -->
+<div id="ctx"></div>
+
+<!-- ==================== new dataset modal ==================== -->
+<div class="modalBg" id="newDsModal">
+  <div class="modal">
+    <h3>New dataset</h3>
+    <label>Dataset name</label>
+    <input type="text" id="ndDsn" autocapitalize="off">
+    <label>Type</label>
+    <select id="ndType">
+      <option value="PO">PDS (partitioned)</option>
+      <option value="PS">Sequential (PS)</option>
+      <option value="VSAM">VSAM (cluster)</option>
+      <option value="ZFS">zFS (filesystem)</option>
+    </select>
+    <div id="ndPsPoFields">
+      <div class="row3">
+        <div><label>RECFM</label><input id="ndRecfm" value="FB"></div>
+        <div><label>LRECL</label><input id="ndLrecl" value="80"></div>
+        <div><label>BLKSIZE</label><input id="ndBlk" value="3120"></div>
+      </div>
+    </div>
+    <div id="ndVsamFields">
+      <label>Cluster type</label>
+      <select id="ndVsamType">
+        <option value="INDEXED">KSDS (indexed)</option>
+        <option value="NONINDEXED">ESDS (entry-sequenced)</option>
+        <option value="NUMBERED">RRDS (relative-record)</option>
+        <option value="LINEAR">Linear (LDS)</option>
+      </select>
+      <div class="row2" id="ndKeyWrap">
+        <div><label>Key length</label><input id="ndKeyLen" value="10"></div>
+        <div><label>Key offset</label><input id="ndKeyOff" value="0"></div>
+      </div>
+      <div class="row2" id="ndRecSizeWrap">
+        <div><label>Avg record size</label><input id="ndRecAvg" value="80"></div>
+        <div><label>Max record size</label><input id="ndRecMax" value="80"></div>
+      </div>
+    </div>
+    <div class="row3">
+      <div><label id="ndPriLabel">Primary</label><input id="ndPri" value="1"></div>
+      <div><label id="ndSecLabel">Secondary</label><input id="ndSec" value="1"></div>
+      <div id="ndDirWrap"><label>Dir blocks</label><input id="ndDir" value="5"></div>
+    </div>
+    <div class="info" id="ndInfo"></div>
+    <div class="actions">
+      <button class="btn" id="ndCancel">Cancel</button>
+      <button class="btn primary" id="ndCreate">Create</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== info / attributes modal ==================== -->
+<div class="modalBg" id="infoModal">
+  <div class="modal">
+    <h3 id="infoModalTitle">Info</h3>
+    <pre class="infoBody" id="infoModalBody"></pre>
+    <div class="actions">
+      <button class="btn primary" id="infoModalClose">Close</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== compare / diff modal ==================== -->
+<div class="modalBg" id="compareModal">
+  <div class="modal compareModal">
+    <h3>Compare</h3>
+    <div class="compareHead">
+      <div id="compareTitleA"></div>
+      <div id="compareTitleB"></div>
+    </div>
+    <div class="comparePanes">
+      <pre class="comparePane" id="comparePaneA"></pre>
+      <pre class="comparePane" id="comparePaneB"></pre>
+    </div>
+    <div class="actions">
+      <button class="btn primary" id="compareClose">Close</button>
+    </div>
+  </div>
+</div>
+
+<script src="console.js"></script>
+</body>
+</html>
