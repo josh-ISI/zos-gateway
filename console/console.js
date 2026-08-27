@@ -3238,11 +3238,58 @@ function updateFindHighlight(paneId) {
   if (!el || !pane) return;
   const area = root.querySelector('#editorArea');
   if (!area || !pane.findTerm || pane.findTerm.length < 3 || !pane.findMatches.length) { el.innerHTML = ''; return; }
-  el.innerHTML = buildFindHighlight(area.value, pane.findMatches, pane.findTerm.length);
+  // Same trailing-newline guard refreshEditorChrome() applies to #edHl: a
+  // textarea reserves a full line-height for the phantom empty line after a
+  // trailing "\n", a <pre> does not. Without this pad, #edFindHl's scroll
+  // range is one line shorter than #editorArea's, so assigning
+  // findHl.scrollTop = area.scrollTop gets clamped near the end of the file
+  // and the two layers drift apart by a line - matching at the top of the
+  // document and visibly misaligned at the bottom. Pads the rendered
+  // overlay only; area.value and the tab's text are untouched.
+  const findHtml = buildFindHighlight(area.value, pane.findMatches, pane.findTerm.length);
+  el.innerHTML = area.value.endsWith('\n') ? findHtml + '\n' : findHtml;
+  // Replacing innerHTML resets this element's own scrollTop/scrollLeft to 0,
+  // so re-apply the textarea's scroll position - otherwise the very act of
+  // typing in the find box knocks the freshly-built highlight layer back out
+  // of alignment, which is the same misalignment syncEditorScroll() fixes.
+  syncEditorScroll(paneId);
 }
 // Actually jumps to and highlights the current match - only called from
 // explicit navigation (Next/Prev/Enter) or after a Replace, never from
 // plain typing. See the note on runFind() above.
+// Scrolls a textarea so the character at `pos` is comfortably on screen.
+// A textarea gives no API for "where is offset N on screen", but the editor
+// is strictly monospaced with white-space:pre and no wrapping, so the
+// position is pure arithmetic: line index times line-height, column index
+// times the measured character width (the same CHAR_WIDTH the column guides
+// are positioned from). Only scrolls when the target is actually outside
+// the viewport, so paging through matches on one screen doesn't jitter.
+function scrollOffsetIntoView(area, pos) {
+  const before = area.value.slice(0, pos);
+  const line = before.split('\n').length - 1;
+  const col = pos - (before.lastIndexOf('\n') + 1);
+  const cs = getComputedStyle(area);
+  const lh = parseFloat(cs.lineHeight) || 19.5;
+  const padTop = parseFloat(cs.paddingTop) || 0;
+  const padLeft = parseFloat(cs.paddingLeft) || 0;
+  if (CHAR_WIDTH === null) CHAR_WIDTH = measureCharWidth();
+
+  const y = padTop + line * lh;
+  const viewTop = area.scrollTop;
+  const viewBot = viewTop + area.clientHeight;
+  // Center the match rather than scrolling it just barely into view - a
+  // match sitting on the very first or last visible row reads as "it didn't
+  // move" and gives no surrounding context.
+  if (y < viewTop || y + lh > viewBot) {
+    area.scrollTop = Math.max(0, y - area.clientHeight / 2 + lh / 2);
+  }
+  const x = padLeft + col * CHAR_WIDTH;
+  const viewLeft = area.scrollLeft;
+  const viewRight = viewLeft + area.clientWidth;
+  if (x < viewLeft || x > viewRight - CHAR_WIDTH * 4) {
+    area.scrollLeft = Math.max(0, x - area.clientWidth / 2);
+  }
+}
 function selectMatch(paneId) {
   const root = paneRootEls[paneId];
   const pane = panes[paneId];
@@ -3250,7 +3297,14 @@ function selectMatch(paneId) {
   if (!area || !pane || pane.findIndex < 0 || !pane.findMatches.length) return;
   const pos = pane.findMatches[pane.findIndex];
   area.focus();
-  area.setSelectionRange(pos, pos + pane.findTerm.length); // focusing after this scrolls the selection into view
+  area.setSelectionRange(pos, pos + pane.findTerm.length);
+  // setSelectionRange() on an *already focused* textarea does not reliably
+  // scroll the selection into view (browsers only guarantee that as part of
+  // focusing), and clicking Next/Prev focuses the button first - so the
+  // selection was being set correctly but left off-screen, which is what
+  // "the cursor doesn't go to the found word" actually was. Scroll to it
+  // explicitly instead of relying on that side effect.
+  scrollOffsetIntoView(area, pos);
   syncEditorScroll(paneId);
   root.querySelector('#findCount').textContent = (pane.findIndex + 1) + ' of ' + pane.findMatches.length;
 }
@@ -3390,6 +3444,15 @@ function syncEditorScroll(paneId) {
   if (!area || !hl) return;
   hl.scrollTop = area.scrollTop;
   hl.scrollLeft = area.scrollLeft;
+  // The find-match layer is a third absolutely-positioned overlay with
+  // overflow:hidden, exactly like #edHl, so it needs the same scroll sync.
+  // Omitting it left the <mark> backgrounds frozen at offset 0 while the
+  // textarea scrolled underneath - so on any scrolled view the highlights
+  // painted the matches from the top of the file over whatever lines
+  // happened to be visible, which reads as "the highlighting is landing on
+  // random words".
+  const findHl = root.querySelector('#edFindHl');
+  if (findHl) { findHl.scrollTop = area.scrollTop; findHl.scrollLeft = area.scrollLeft; }
   const gutter = root.querySelector('#edGutter');
   if (gutter) gutter.scrollTop = area.scrollTop;
   const ruler = root.querySelector('#edRuler');
