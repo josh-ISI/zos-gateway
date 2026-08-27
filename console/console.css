@@ -369,6 +369,12 @@ html[data-theme="dark"] #msg .msgClose:hover { background: rgba(255, 255, 255, .
 .treeItem.unsupported { color: var(--muted); cursor: not-allowed; }
 .treeItem.unsupported:hover { background: var(--hover-danger-bg); }
 .treeItem .muted { color: var(--muted); font-size: 11.5px; }
+/* Volumes section - flat rows (no tree hierarchy, unlike datasets/USS/jobs),
+   each summarizing one volume's key attributes inline; full detail is the
+   "Show Attributes..." context menu, same info-modal pattern as datasets. */
+.volSerial { font-weight: 600; font-family: "SF Mono", Consolas, "Courier New", monospace; }
+.volFree, .volPct, .volSg { color: var(--muted); font-size: 11.5px; }
+.volSg::before { content: '\00b7'; margin-right: 6px; }
 /* USS directories can nest arbitrarily deep (unlike PDS members, which are
    always exactly one level under a dataset) - each nested childWrap adds
    another indent so depth is visible. */

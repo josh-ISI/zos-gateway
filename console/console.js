@@ -227,6 +227,10 @@ function reorderSideSections() {
 // sections - nearestOpenSection() walks past any collapsed ones in between.
 const SIDE_HEIGHTS_KEY = 'isiSideHeights';
 const SIDE_WIDTH_KEY = 'isiSideWidth';
+// Starting flex-basis for an open section the user has never dragged, i.e.
+// one with no entry in isiSideHeights - roughly a header plus a filter row
+// plus a few tree rows. See applySideHeights() for why this must not be 0.
+const DEFAULT_SIDE_H = 180;
 function loadSideHeights() {
   try { return JSON.parse(localStorage.getItem(SIDE_HEIGHTS_KEY) || '{}'); } catch (e) { return {}; }
 }
@@ -254,8 +258,22 @@ function applySideHeights() {
     // dead end too). flex-grow:1 keeps the saved height as the starting
     // size but lets the section actually claim any space its collapsed-away
     // neighbors freed up, same as a section with no saved height at all.
-    if (sideHeights[sec.id]) { sec.style.flex = '1 1 ' + sideHeights[sec.id] + 'px'; sec.style.height = ''; }
-    else { sec.style.flex = '1 1 0'; sec.style.height = ''; }
+    // The no-saved-height case used a flex-basis of 0, which quietly broke
+    // as soon as a *new* section was added to the sidebar. Flexbox
+    // distributes shrinkage in proportion to each item's basis, so an item
+    // with basis 0 absorbs none of the shortfall - but it also starts from
+    // 0, so when the older sections' saved heights already overflow the
+    // sidebar there is no free space left to grow into, and the new
+    // section sits pinned at .sideSection.open's 34px min-height: header
+    // visible, body zero-height. That is exactly how the Volumes section
+    // presented when it shipped - it was the only section nobody had ever
+    // dragged, so the only one with no entry in isiSideHeights.
+    // A real default basis makes an un-dragged section shrink and grow on
+    // the same terms as its saved-height siblings instead of being a
+    // special case that only behaves when the sidebar isn't full.
+    const basis = sideHeights[sec.id] || DEFAULT_SIDE_H;
+    sec.style.flex = '1 1 ' + basis + 'px';
+    sec.style.height = '';
   });
 }
 function nearestOpenSection(el, dir) {
@@ -1565,7 +1583,17 @@ function buildTokRe(fmt) {
     '(?<cmtblock>/\\*[\\s\\S]*?\\*/)' +
     '|(?<cmtjcl>^[ \\t]*//\\*.*$)' +
     '|(?<cmtasm>^[ \\t]*\\*.*$)' +
-    '|(?<name>^[ \\t]*//[ \\t]*\\S+)' +
+    // No gap allowed between "//" and the name field - a real JCL statement
+    // name sits immediately in columns 3+ (e.g. "//STEPNAME"). A JCL
+    // continuation line has "//" followed by *blank* columns before the
+    // operand resumes (e.g. "//  PARM='-aggregate ...'"), so allowing
+    // [ \t]* here (as this used to) let \S+ greedily swallow the first
+    // word of the continued operand - including an opening quote - as a
+    // "name" token. That orphaned the matching closing quote later on the
+    // same line, which then opened a brand-new, never-terminated string
+    // that swallowed the rest of the file in the string color until the
+    // next stray apostrophe happened to "close" it.
+    '|(?<name>^[ \\t]*//\\S+)' +
     asmLabel +
     "|(?<str1>'(?:[^']|'')*')" +
     '|(?<str2>"(?:[^"\\\\]|\\\\.)*")' +
@@ -4121,6 +4149,140 @@ async function issueTsoCommand() {
 // #jobsTsoBtn in the Jobs toolbar only; moved here so it's reachable no
 // matter which section is open.
 $('#tsoBtn').onclick = issueTsoCommand;
+
+// ==================== volumes ====================
+// z/OSMF's Storage Management REST API (a separate service from the
+// dataset/USS Files API used everywhere else in this console) - GET
+// /zosmf/storage/rest/v1/volumes, returning a bare JSON array (not the
+// {items:[...]} envelope the Files API uses) of volume records. Requires
+// the z/OSMF "Storage Management" plugin to be active on the target
+// system (SAF resource identifier STORAGE); if this section errors, check
+// /zosmf/info's plugin list first. Field names/shapes are per IBM's spec:
+// https://www.ibm.com/docs/en/zos/3.1.0?topic=services-get-list-volumes
+//
+// SCOPE - THIS IS SMS-MANAGED VOLUMES ONLY, and that is the API's
+// behaviour, not a bug here. IBM describes the response as "an array of
+// JSON *storage group* documents", and every field is a property of the
+// volume's SMS *definition* rather than of the live device: lastUser is
+// "the user that made the last update to the volume definition",
+// updateDate/updateTime are that definition's, and storageGroupName /
+// storageGroupStatus have no meaning off SMS. It reads the SMS
+// configuration, not the UCBs - so a real, online, non-SMS volume (one
+// DEVSERV reports as PRIV/RSDNT with no SMS status) is correctly absent
+// from the result, and the API returns an empty array rather than an
+// error. Confirmed live against a non-SMS volume.
+//
+// There is no z/OSMF REST API that enumerates online DASD generally.
+// Covering non-SMS volumes would mean issuing D U,DASD,ONLINE or DEVSERV
+// QDASD through the operator console API (/zosmf/restconsoles) and
+// parsing the console text - deliberately not done, since that data
+// source cannot supply free space, capacity or storage-group attributes
+// anyway. The section is labelled "Volumes (SMS-managed)" in index.html
+// so the scope is visible in the UI rather than only in this comment.
+async function volList(filter) {
+  const qs = filter ? ('?filter=' + enc(filter)) : '';
+  const j = await zCall('GET', '/zosmf/storage/rest/v1/volumes' + qs);
+  return Array.isArray(j) ? j : ((j && j.items) || []);
+}
+// Capacity/free-space fields are documented as plain megabyte numbers -
+// shown as GB above 1024MB for readability, exact MB below that.
+function fmtMB(mb) {
+  if (mb === undefined || mb === null) return '?';
+  return mb >= 1024 ? (mb / 1024).toFixed(1) + ' GB' : mb + ' MB';
+}
+let currentVolFilter = '';
+async function refreshVolumes() {
+  const box = $('#volTree'); if (!box) return;
+  box.innerHTML = '<div class="treeItem muted">Loading...</div>';
+  try {
+    const vols = await volList(currentVolFilter);
+    box.innerHTML = '';
+    // An empty array here is a normal, successful response - most often it
+    // just means the volser asked for isn't SMS-managed. Say so, rather
+    // than the bare "not found" that sent this looking like a bug once.
+    if (!vols.length) {
+      box.innerHTML = '<div class="treeItem muted">' +
+        (currentVolFilter
+          ? 'No SMS-managed volume matches ' + escHtml(currentVolFilter) + '.'
+          : 'No SMS-managed volumes found.') +
+        '</div>' +
+        '<div class="treeItem muted">Volumes outside SMS (DEVSERV shows them as PRIV/RSDNT with no SMS status) are not reported by this API.</div>';
+      return;
+    }
+    vols.forEach(v => box.appendChild(buildVolRow(v)));
+  } catch (e) {
+    box.innerHTML = '';
+    flash('List volumes failed: ' + e.message + ' - is the Storage Management plugin enabled on this z/OSMF?', false);
+  }
+}
+// A volume record whose totalCapacity is 0 has no space data behind it -
+// SMS simply hasn't got current statistics for that volume (IBM's own
+// documented sample response is exactly this: every space field zero).
+// That is NOT the same as a full volume, and rendering it as "0 MB free,
+// 0% used" states the opposite of the truth twice over - 0% used should
+// imply almost everything is free. Report the absence instead.
+function hasSpaceData(v) {
+  return !!v.totalCapacity;
+}
+function buildVolRow(v) {
+  const row = document.createElement('div');
+  row.className = 'treeItem';
+  const pct = (v.fullVolumeLastUsed === undefined || v.fullVolumeLastUsed === null) ? '?' : v.fullVolumeLastUsed + '%';
+  const spaceHtml = hasSpaceData(v)
+    ? '<span class="volFree">' + escHtml(fmtMB(v.freeSpace)) + ' free</span>' +
+      '<span class="volPct">' + escHtml(pct) + ' used</span>'
+    : '<span class="volFree">no space data</span>';
+  row.innerHTML =
+    '<span class="volSerial">' + escHtml(v.volumeSerial || '?') + '</span>' +
+    spaceHtml +
+    (v.storageGroupName ? '<span class="volSg">' + escHtml(v.storageGroupName) + '</span>' : '');
+  row.onclick = () => showVolumeAttributes(v);
+  row.oncontextmenu = e => ctxShow(e, [
+    ['Show Attributes...', () => showVolumeAttributes(v)],
+    ['Copy Volser', () => copyNameToClipboard(v.volumeSerial || '')],
+  ]);
+  return row;
+}
+function showVolumeAttributes(v) {
+  const lines = [
+    'Volume: ' + (v.volumeSerial || '?'),
+    '',
+  ];
+  if (hasSpaceData(v)) {
+    lines.push(
+      'Total capacity: ' + fmtMB(v.totalCapacity),
+      'Free space: ' + fmtMB(v.freeSpace),
+      'Largest free extent: ' + fmtMB(v.largestFreeExtent),
+      '% full: ' + (v.fullVolumeLastUsed === undefined || v.fullVolumeLastUsed === null ? '?' : v.fullVolumeLastUsed + '%'),
+      '% track-managed space used: ' + (v.trackRegionLastUsed === undefined || v.trackRegionLastUsed === null ? '?' : v.trackRegionLastUsed + '%'),
+    );
+  } else {
+    lines.push(
+      'Space: no data reported by SMS for this volume.',
+      '(All space fields came back zero, which means statistics are',
+      'unavailable - it does not mean the volume is full.)',
+    );
+  }
+  lines.push(
+    '',
+    'Storage group: ' + (v.storageGroupName || '(none)'),
+    'Storage group status: ' + (v.storageGroupStatus || '?'),
+    '',
+    'Last updated by: ' + (v.lastUser || '?'),
+    'Last updated: ' + ([v.updateDate, v.updateTime].filter(Boolean).join(' ') || '?'),
+  );
+  if (Array.isArray(v.status) && v.status.length) {
+    lines.push('', 'System status:');
+    v.status.forEach(s => {
+      lines.push('  ' + (s.sysName || '?') + ': MVS=' + (s.mvsSystemStatus || '?') +
+        ', requested=' + (s.requestedSystemStatus || '?') + ', SMS=' + (s.confirmedSmsStatus || '?'));
+    });
+  }
+  showInfoModal('Volume Attributes', lines.join('\n'));
+}
+$('#volListBtn').onclick = () => { currentVolFilter = $('#volFilter').value.trim(); refreshVolumes(); };
+$('#volFilter').addEventListener('keydown', e => { if (e.key === 'Enter') $('#volListBtn').click(); });
+$('#volRefreshBtn').onclick = refreshVolumes;
 
 // ==================== init ====================
 (async function init() {

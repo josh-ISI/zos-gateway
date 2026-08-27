@@ -148,6 +148,23 @@
       </div>
     </div>
 
+    <div class="sideResizer"></div>
+
+    <!-- ---- Volumes ---- -->
+    <div class="sideSection open" id="secVolumes">
+      <div class="sideHead"><span class="chev">&#9662;</span><span class="sideTitle">Volumes (SMS-managed)</span></div>
+      <div class="sideBody">
+        <div class="filterRow">
+          <input type="text" id="volFilter" placeholder="Volser filter, e.g. WORK* (blank = all SMS volumes)" autocapitalize="off" autocomplete="off">
+          <button class="btn primary" id="volListBtn">List</button>
+        </div>
+        <div class="toolbar">
+          <button class="btn" id="volRefreshBtn">Refresh</button>
+        </div>
+        <div id="volTree" class="tree"></div>
+      </div>
+    </div>
+
   </div>
 
   <div class="shellResizer" id="shellResizer"></div>
