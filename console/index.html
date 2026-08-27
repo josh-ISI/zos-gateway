@@ -63,7 +63,7 @@
       <div class="sideHead"><span class="chev">&#9662;</span><span class="sideTitle">Data Sets</span></div>
       <div class="sideBody">
         <div class="filterRow">
-          <input type="text" id="hlqFilter" placeholder="HLQ, e.g. YOURID.* or *.COBOL" autocapitalize="off">
+          <input type="text" id="hlqFilter" placeholder="HLQ, e.g. YOURID.* or *.COBOL" autocapitalize="off" autocomplete="off">
           <button class="btn primary" id="listBtn">List</button>
         </div>
         <div class="toolbar">
@@ -89,7 +89,8 @@
       <div class="sideHead"><span class="chev">&#9662;</span><span class="sideTitle">Unix System Services (USS)</span></div>
       <div class="sideBody">
         <div class="ussBar">
-          <span class="ussCurPath" id="ussCurPath">/</span>
+          <span class="ussCurPath" id="ussCurPath" title="Click to edit path">/</span>
+          <input type="text" id="ussCurPathEdit" class="ussCurPathEdit" autocapitalize="off" style="display:none">
           <button class="iconBtn" id="ussUpBtn" title="Up one level">&#8593;</button>
           <button class="iconBtn" id="ussRefreshBtn" title="Refresh">&#8635;</button>
           <button class="iconBtn" id="ussSearchBtn" title="Search / recent paths">&#128269;</button>
@@ -112,7 +113,7 @@
       <div class="sideHead"><span class="chev">&#9662;</span><span class="sideTitle">Jobs</span></div>
       <div class="sideBody">
         <div class="filterRow">
-          <input type="text" id="jobFilter" placeholder="jobname or pattern, e.g. YOURID*">
+          <input type="text" id="jobFilter" placeholder="jobname or pattern, e.g. YOURID*" autocomplete="off">
           <button class="btn primary" id="jobsListBtn">List</button>
         </div>
         <div class="toolbar">

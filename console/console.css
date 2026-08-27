@@ -260,6 +260,16 @@ html[data-theme="dark"] #msg .msgClose:hover { background: rgba(255, 255, 255, .
 .ussCurPath {
   flex: 1; font-size: 12.5px; font-family: "SF Mono", Consolas, "Courier New", monospace;
   color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  cursor: text;
+}
+.ussCurPath:hover { text-decoration: underline dotted; text-underline-offset: 2px; }
+/* Swapped in for #ussCurPath while editing (see wireUssCurPathEdit()) - same
+   slot in the bar, styled like a real address-bar field rather than the
+   plain display span, so it's obvious it's now editable. */
+.ussCurPathEdit {
+  flex: 1; font-size: 12.5px; font-family: "SF Mono", Consolas, "Courier New", monospace;
+  color: var(--ink); border: 1px solid var(--accent-ink); border-radius: 4px;
+  padding: 2px 6px; background: var(--bg); min-width: 0;
 }
 .iconBtn {
   border: 1px solid var(--line); background: var(--surface); border-radius: 5px;

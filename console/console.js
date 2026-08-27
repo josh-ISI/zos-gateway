@@ -21,9 +21,15 @@ const $ = s => document.querySelector(s);
 // yourid has RACF SPECIAL on this system (see zos/ARCHITECTURE.md
 // "Decisions"), so SAF gives zero safety net against a UI bug here the way
 // it might for a more restricted userid. This list is a client-side
-// guardrail only - extend it for any other system datasets worth
-// protecting on this catalog.
-const PROTECTED_HLQ = ['SYS1', 'SYS2', 'SYS3', 'PARMLIB', 'PROCLIB'];
+// guardrail only, not a real security boundary - it exists purely to stop
+// this console from creating/editing/deleting things under system-critical
+// HLQs by accident (see ISSUES.md's "Critical incident" note: a bug here
+// once wiped SYS1.PROCLIB). Intentionally left empty at the maintainer's
+// request, to allow dataset creation under any HLQ including SYS*.** ones
+// (e.g. SYS3.CAI.OPSMVS.* product datasets that legitimately need managing
+// from here) - re-add entries like 'SYS1' below if you want the guardrail
+// back for specific HLQs.
+const PROTECTED_HLQ = [];
 function isProtected(dsn) {
   return PROTECTED_HLQ.includes((dsn.split('.')[0] || '').toUpperCase());
 }
@@ -141,7 +147,16 @@ async function requireAuth() {
     return false;
   }
   const u = localStorage.getItem('isiUser');
-  const whoText = u ? ('Signed in as ' + u) : 'Signed in';
+  // A valid z/OSMF session (checked above) only proves *some* authenticated
+  // request works - it says nothing about whether *this* browser ever
+  // recorded who that is. That gap showed up live: a colleague's session
+  // passed the check above but isiUser was never set locally (reached
+  // index.html without going through login.html's form - a bookmark, a
+  // leftover session, etc.), so the profile popover showed "(unknown)"
+  // instead of their actual userid. Rather than display an unknown
+  // identity, force a real sign-in so isiUser is always accurate afterward.
+  if (!u) { location.href = 'login.html'; return false; }
+  const whoText = 'Signed in as ' + u;
   $('#whoLabel').textContent = whoText; // visually hidden, kept for screen readers
   $('#profileBtn').title = whoText + ' · Profile & appearance';
   const pu = $('#profileUser');
@@ -1478,6 +1493,35 @@ $('#ussSearchBtn').onclick = (e) => {
 };
 $('#ussFilterGo').onclick = () => goToUssPath($('#ussPathFilter').value);
 $('#ussPathFilter').addEventListener('keydown', e => { if (e.key === 'Enter') goToUssPath($('#ussPathFilter').value); });
+// Click-to-edit the current path directly in the breadcrumb bar, instead of
+// always having to open the search popover first just to jump somewhere.
+// Swaps #ussCurPath (display) for #ussCurPathEdit (a real input) in place -
+// Enter commits via the existing goToUssPath() (which also re-renders
+// #ussCurPath's text), Escape or clicking away cancels back to the display
+// span with no navigation.
+function wireUssCurPathEdit() {
+  const disp = $('#ussCurPath');
+  const edit = $('#ussCurPathEdit');
+  if (!disp || !edit) return;
+  const startEdit = () => {
+    edit.value = currentUssPath;
+    disp.style.display = 'none';
+    edit.style.display = '';
+    edit.focus();
+    edit.select();
+  };
+  const endEdit = () => {
+    edit.style.display = 'none';
+    disp.style.display = '';
+  };
+  disp.onclick = startEdit;
+  edit.onkeydown = (e) => {
+    if (e.key === 'Enter') { e.preventDefault(); goToUssPath(edit.value); endEdit(); }
+    else if (e.key === 'Escape') { e.preventDefault(); endEdit(); }
+  };
+  edit.onblur = endEdit;
+}
+wireUssCurPathEdit();
 $('#ussUpBtn').onclick = () => {
   const parts = currentUssPath.replace(/\/+$/, '').split('/').filter(Boolean);
   parts.pop();
