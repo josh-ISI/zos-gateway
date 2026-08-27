@@ -158,7 +158,7 @@ async function requireAuth() {
   if (!u) { location.href = 'login.html'; return false; }
   const whoText = 'Signed in as ' + u;
   $('#whoLabel').textContent = whoText; // visually hidden, kept for screen readers
-  $('#profileBtn').title = whoText + ' · Profile & appearance';
+  $('#profileBtn').title = whoText + ' \u00B7 Profile & appearance';
   const pu = $('#profileUser');
   if (pu) pu.textContent = u || '(unknown)';
   const ph = $('#profileHost');
@@ -2657,11 +2657,20 @@ function updateSyslogStatus(t) {
   const root = paneRootEls[t.pane];
   const el = root && root.querySelector('#edSyslogStatus');
   if (!el) return;
+  // U+25CF (BLACK CIRCLE) and U+00B7 (MIDDLE DOT) are written as escapes so
+  // this file's bytes stay pure ASCII. Deploying it runs it through
+  // "--encoding IBM-1047", and U+25CF has no IBM-1047 mapping at all - the
+  // conversion substitutes X'3F' (EBCDIC SUB) for it, so a literal bullet
+  // here arrives on the server corrupted and renders as a replacement glyph.
+  // (U+00B7 does map, to X'B3', but escaping both keeps the rule simple:
+  // no non-ASCII bytes in any file that gets uploaded through a codepage
+  // conversion.) The escape survives untouched because it is plain ASCII
+  // source text; the browser builds the real character at runtime.
   if (t.lastPollError) {
-    el.textContent = '● Auto-refresh error: ' + t.lastPollError;
+    el.textContent = '\u25CF Auto-refresh error: ' + t.lastPollError;
     el.className = 'edSyslogStatus err';
   } else {
-    el.textContent = '● Live · last updated ' + (t.lastPollAt ? new Date(t.lastPollAt).toLocaleTimeString() : '-');
+    el.textContent = '\u25CF Live \u00B7 last updated ' + (t.lastPollAt ? new Date(t.lastPollAt).toLocaleTimeString() : '-');
     el.className = 'edSyslogStatus ok';
   }
 }
