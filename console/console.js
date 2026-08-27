@@ -907,15 +907,74 @@ async function ussList(path) {
 // IBM-1047`, correct in PCOMM/x3270, garbled in the browser after that
 // change; also garbled in PCOMM after being edited/saved via the browser).
 //
-// For a genuinely ASCII-native file (.bash_history and similar), use "Open
-// with Encoding..." (openWithEncoding/pickEncoding above) and pick
-// ISO8859-1 explicitly - that's what per-file overrides are for. A better
-// long-term fix would be reading each file's actual ccsid tag (if z/OSMF's
-// API exposes it) and using that automatically instead of guessing either
-// way, but that needs further investigation against the live system before
-// changing this again.
-async function ussRead(path) { return await zCall('GET', '/zosmf/restfiles/fs/' + ussEncPath(path), { raw: true, headers: encHeaders('IBM-1047') }); }
-async function ussWrite(path, text) { await zCall('PUT', '/zosmf/restfiles/fs/' + ussEncPath(path), { body: text, headers: encHeaders('IBM-1047') }); }
+// ussRead() below therefore keeps IBM-1047 as the *first* attempt, but no
+// longer treats it as the final answer: textScore() grades what came back,
+// and only when that grade is bad does it spend a second request trying
+// ISO8859-1. A real IBM-1047 file decodes cleanly on the first read and
+// scores well, so it never reaches the fallback - which is what keeps this
+// from regressing the racf-backend-recycle.sh case above. "Open with
+// Encoding..." (openWithEncoding/pickEncoding) remains the manual override
+// for anything the heuristic gets wrong, or for codepages outside these two.
+
+// Fraction of characters that are plausible text: printable ASCII, plus the
+// handful of whitespace controls real text actually contains. Deliberately
+// counts only ASCII as "good" - EBCDIC bytes misread as Latin-1 land almost
+// entirely in the C1 control range and the accented high range, which is
+// precisely the signature being detected (and exactly what the garbled
+// application.yml screenshot showed). Returns 1 for empty input so a
+// zero-length file is never taken as evidence of the wrong codepage.
+function textScore(s) {
+  if (!s || !s.length) return 1;
+  let good = 0;
+  // Cap the scan: a few KB is plenty to tell text from mojibake, and this
+  // must not become a per-open cost proportional to file size.
+  const n = Math.min(s.length, 8192);
+  for (let i = 0; i < n; i++) {
+    const c = s.charCodeAt(i);
+    if ((c >= 0x20 && c <= 0x7e) || c === 0x09 || c === 0x0a || c === 0x0d) good++;
+  }
+  return good / n;
+}
+// Below this, content is treated as "probably decoded through the wrong
+// codepage". Normal source/config text sits at essentially 1.0; the EBCDIC-
+// as-Latin-1 case sits far below. 0.85 leaves generous room for legitimately
+// accented or non-English text without tripping.
+const TEXT_SCORE_MIN = 0.85;
+// Remembers which codepage each USS path was successfully *read* through, so
+// ussWrite() can save it back the same way. Without this the auto-detect
+// below would recreate the exact round-trip corruption it exists to prevent:
+// a file read as ISO8859-1 but written back as IBM-1047 gets converted
+// through a codepage it was never stored in. Keyed by path, populated only
+// by ussRead() - "Open with Encoding..." tabs carry their own t.encoding and
+// go through ussWriteEnc() instead, so the two mechanisms don't overlap.
+const ussReadEncoding = Object.create(null);
+async function ussRead(path) {
+  const primary = await zCall('GET', '/zosmf/restfiles/fs/' + ussEncPath(path), { raw: true, headers: encHeaders('IBM-1047') });
+  if (textScore(primary) >= TEXT_SCORE_MIN) { ussReadEncoding[path] = 'IBM-1047'; return primary; }
+  // Looks like it was decoded through the wrong codepage - try the other
+  // common case before giving up. Keep the better of the two rather than
+  // blindly preferring the retry, so a file that is simply binary (bad
+  // under both) still comes back as the IBM-1047 read it would have
+  // returned before, instead of silently changing behavior.
+  let alt;
+  try { alt = await zCall('GET', '/zosmf/restfiles/fs/' + ussEncPath(path), { raw: true, headers: encHeaders('ISO8859-1') }); }
+  catch (e) { ussReadEncoding[path] = 'IBM-1047'; return primary; }
+  if (textScore(alt) > textScore(primary)) {
+    ussReadEncoding[path] = 'ISO8859-1';
+    flash('Opened as ISO8859-1 - IBM-1047 did not decode cleanly.', true);
+    return alt;
+  }
+  ussReadEncoding[path] = 'IBM-1047';
+  return primary;
+}
+// Saves through whichever codepage this path was last read through, so an
+// auto-detected ISO8859-1 file round-trips intact instead of being written
+// back as EBCDIC. Falls back to IBM-1047 for a path never read here (e.g.
+// creating a brand-new file), which is the project's own convention.
+async function ussWrite(path, text) {
+  const enc = ussReadEncoding[path] || 'IBM-1047';
+  await zCall('PUT', '/zosmf/restfiles/fs/' + ussEncPath(path), { body: text, headers: encHeaders(enc) });
+}
 async function ussDelete(path, isDir) {
   await zCall('DELETE', '/zosmf/restfiles/fs/' + ussEncPath(path), isDir ? { headers: { 'X-IBM-Option': 'recursive' } } : undefined);
 }
