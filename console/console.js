@@ -4224,13 +4224,29 @@ async function refreshVolumes() {
 function hasSpaceData(v) {
   return !!v.totalCapacity;
 }
+// Derive "% used" from capacity and free space rather than trusting the
+// API's own fullVolumeLastUsed, which comes back 0 on volumes whose
+// totalCapacity/freeSpace are plainly non-zero and contradict it (SMPWK1:
+// 79.3 GB total, 28.6 GB free, "% full: 0%"). IBM documents the field as
+// "the percentage of total space that is in use", but does not say what
+// populates it, and it evidently is not populated here - whereas capacity
+// and free space are live and consistent. Two numbers that disagree are
+// worse than one, so the arithmetic wins and the raw field is reported
+// separately in the attributes modal rather than driving the display.
+function usedPct(v) {
+  if (!hasSpaceData(v)) return null;
+  const free = v.freeSpace || 0;
+  const used = v.totalCapacity - free;
+  if (used < 0) return null; // free > capacity: nonsense, don't invent a number
+  return Math.round((used / v.totalCapacity) * 100);
+}
 function buildVolRow(v) {
   const row = document.createElement('div');
   row.className = 'treeItem';
-  const pct = (v.fullVolumeLastUsed === undefined || v.fullVolumeLastUsed === null) ? '?' : v.fullVolumeLastUsed + '%';
+  const pct = usedPct(v);
   const spaceHtml = hasSpaceData(v)
     ? '<span class="volFree">' + escHtml(fmtMB(v.freeSpace)) + ' free</span>' +
-      '<span class="volPct">' + escHtml(pct) + ' used</span>'
+      '<span class="volPct">' + escHtml(pct === null ? '?' : pct + '%') + ' used</span>'
     : '<span class="volFree">no space data</span>';
   row.innerHTML =
     '<span class="volSerial">' + escHtml(v.volumeSerial || '?') + '</span>' +
@@ -4249,12 +4265,19 @@ function showVolumeAttributes(v) {
     '',
   ];
   if (hasSpaceData(v)) {
+    const pct = usedPct(v);
     lines.push(
       'Total capacity: ' + fmtMB(v.totalCapacity),
-      'Free space: ' + fmtMB(v.freeSpace),
+      'Used: ' + fmtMB(v.totalCapacity - (v.freeSpace || 0)) +
+        (pct === null ? '' : '  (' + pct + '%)'),
+      'Free space: ' + fmtMB(v.freeSpace) +
+        (pct === null ? '' : '  (' + (100 - pct) + '%)'),
       'Largest free extent: ' + fmtMB(v.largestFreeExtent),
-      '% full: ' + (v.fullVolumeLastUsed === undefined || v.fullVolumeLastUsed === null ? '?' : v.fullVolumeLastUsed + '%'),
-      '% track-managed space used: ' + (v.trackRegionLastUsed === undefined || v.trackRegionLastUsed === null ? '?' : v.trackRegionLastUsed + '%'),
+      '',
+      'As reported by SMS (may be unpopulated - see % used above,',
+      'which is derived from capacity and free space):',
+      '  % full: ' + (v.fullVolumeLastUsed === undefined || v.fullVolumeLastUsed === null ? '?' : v.fullVolumeLastUsed + '%'),
+      '  % track-managed space used: ' + (v.trackRegionLastUsed === undefined || v.trackRegionLastUsed === null ? '?' : v.trackRegionLastUsed + '%'),
     );
   } else {
     lines.push(
